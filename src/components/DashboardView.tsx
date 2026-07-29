@@ -78,7 +78,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         setAuditMessage('تم إكمال الفحص السريع: جميع السجلات متطابقة ومستوفاة للشروط.');
       }
     } catch {
-      setAuditMessage('فحص ذكي محلي: تم تدقيق 7 ملفات، هناك 2 تنبيهات تتطلب مراجعتك في شاشة الرواتب.');
+      setAuditMessage('فحص ذكي محلي: تم تدقيق 7 ملفات، هناك 2 تنبيهات تتطلب مراجعتك في شاشة المرتبات.');
     } finally {
       setIsAuditing(false);
     }
@@ -165,14 +165,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {presentToday} <span className="text-xs font-normal text-slate-400">/ {totalEmployees}</span>
             </span>
             <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-              {Math.round((presentToday / totalEmployees) * 100)}% انضباط
+              {totalEmployees > 0 ? Math.round((presentToday / totalEmployees) * 100) : 0}% انضباط
             </span>
           </div>
           {/* Progress bar */}
           <div className="w-full bg-slate-100 dark:bg-slate-700 h-2 rounded-full mt-3 overflow-hidden">
             <div
               className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
-              style={{ width: `${(presentToday / totalEmployees) * 100}%` }}
+              style={{ width: `${totalEmployees > 0 ? (presentToday / totalEmployees) * 100 : 0}%` }}
             />
           </div>
         </div>
@@ -205,7 +205,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Total Monthly Payroll */}
         <div className="p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 shadow-xs hover:shadow-sm transition-all">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">إجمالي مسير الرواتب الصافي</span>
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">إجمالي جدول المرتبات الصافي</span>
             <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center">
               <Wallet className="w-5 h-5" />
             </div>
@@ -218,7 +218,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between text-[11px]">
             <span className="text-amber-600 font-bold">حالة المسير: مسودة بانتظار الاعتماد</span>
             <button onClick={() => setActiveTab('payroll')} className="text-blue-600 font-bold hover:underline">
-              جدول الرواتب
+              جدول المرتبات
             </button>
           </div>
         </div>
@@ -241,7 +241,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed max-w-3xl">
-                يقوم النظام بالتحقق التلقائي من تطابق سجلات الحضور والسلف والمستندات الرسمية قبل السماح باعتمد الرواتب لمنع الأخطاء أو التعديلات غير المصرح بها.
+                يقوم النظام بالتحقق التلقائي من تطابق سجلات الحضور والسلف والمستندات الرسمية قبل السماح باعتماد المرتبات لمنع الأخطاء أو التعديلات غير المصرح بها.
               </p>
             </div>
           </div>
@@ -313,8 +313,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                   <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
                     <div
-                      className="bg-gradient-to-r from-blue-600 to-indigo-500 h-2 rounded-full"
-                      style={{ width: `${(deptEmployees.length / totalEmployees) * 100}%` }}
+                       className="bg-gradient-to-r from-blue-600 to-indigo-500 h-2 rounded-full"
+                      style={{ width: `${totalEmployees > 0 ? (deptEmployees.length / totalEmployees) * 100 : 0}%` }}
                     />
                   </div>
                 </div>
@@ -352,7 +352,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700/70 flex items-center justify-between gap-3 text-xs bg-white/50 dark:bg-slate-900/30"
                 >
                   <div className="flex items-center gap-2.5 overflow-hidden">
-                    <img src={emp.avatar} alt={emp.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                    <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold shrink-0">
+                      {emp.name.charAt(0)}
+                    </div>
                     <div className="overflow-hidden">
                       <p className="font-bold text-slate-800 dark:text-slate-100 truncate">{emp.name}</p>
                       <p className="text-[10px] text-slate-400 truncate">{emp.position}</p>

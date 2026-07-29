@@ -3,6 +3,7 @@ import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
 import { EmployeesView } from './components/EmployeesView';
+import { EmployeeEffectsView } from './components/EmployeeEffectsView';
 import { AttendanceView } from './components/AttendanceView';
 import { PayrollView } from './components/PayrollView';
 import { LoansAssetsView } from './components/LoansAssetsView';
@@ -10,6 +11,8 @@ import { AiAssistantView } from './components/AiAssistantView';
 import { ReportsView } from './components/ReportsView';
 import { SettingsView } from './components/SettingsView';
 import { DatabaseView } from './components/DatabaseView';
+import { DocumentsView } from './components/DocumentsView';
+import { LoginView } from './components/LoginView';
 
 import {
   initialEmployees,
@@ -32,10 +35,14 @@ import {
   SystemAlert,
   Department,
   Shift,
-  TabType
+  TabType,
+  DocumentItem
 } from './types';
 
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem('isAuthenticated') === 'true';
+  });
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [darkMode, setDarkMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,6 +57,15 @@ export default function App() {
   const [alerts, setAlerts] = useState<SystemAlert[]>(initialSystemAlerts);
   const [departments] = useState<Department[]>(initialDepartments);
   const [shifts, setShifts] = useState<Shift[]>(initialShifts);
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+
+  const handleAddDocument = (doc: DocumentItem) => {
+    setDocuments((prev) => [doc, ...prev]);
+  };
+
+  const handleDeleteDocument = (id: string) => {
+    setDocuments((prev) => prev.filter((d) => d.id !== id));
+  };
 
   // Dark Mode Sync
   useEffect(() => {
@@ -78,6 +94,14 @@ export default function App() {
       overtimeHours: 0,
       overtimeRate: 1.5,
       overtimePay: 0,
+      overtimeHoursDay: 0,
+      overtimeHoursNight: 0,
+      overtimeRateDay: 1.5,
+      overtimeRateNight: 2.0,
+      fridayOvertimeHours: 0,
+      fridayOvertimeRate: 2.0,
+      fridayOvertimePay: 0,
+      bonus: 0,
       deductions: 0,
       latePenaltyDeduction: 0,
       loanInstallment: 0,
@@ -127,6 +151,125 @@ export default function App() {
     }
   };
 
+  // Handle Update Employee
+  const handleUpdateEmployee = (updatedEmp: Employee) => {
+    setEmployees((prev) =>
+      prev.map((emp) => (emp.id === updatedEmp.id ? updatedEmp : emp))
+    );
+
+    // Also update any matching fields in payroll records if needed (e.g. name, position, department, baseSalary, etc.)
+    setPayrollRecords((prev) =>
+      prev.map((p) =>
+        p.employeeId === updatedEmp.id
+          ? {
+              ...p,
+              employeeName: updatedEmp.name,
+              position: updatedEmp.position,
+              department: updatedEmp.department,
+              baseSalary: updatedEmp.baseSalary,
+              allowances: updatedEmp.housingAllowance + updatedEmp.transportAllowance + updatedEmp.otherAllowances,
+              socialInsurance: updatedEmp.gosiInsurance,
+              netSalary:
+                updatedEmp.baseSalary +
+                updatedEmp.housingAllowance +
+                updatedEmp.transportAllowance +
+                updatedEmp.otherAllowances -
+                updatedEmp.gosiInsurance -
+                p.loanInstallment, // keep loanInstallment intact
+            }
+          : p
+      )
+    );
+  };
+
+  // Handle Delete Employee
+  const handleDeleteEmployee = (employeeId: string) => {
+    if (window.confirm('هل أنت متأكد من رغبتك في حذف هذا الموظف نهائياً؟')) {
+      setEmployees((prev) => prev.filter((emp) => emp.id !== employeeId));
+      setPayrollRecords((prev) => prev.filter((p) => p.employeeId !== employeeId));
+      setAssets((prev) =>
+        prev.map((a) =>
+          a.assignedToEmployeeId === employeeId
+            ? {
+                ...a,
+                assignedToEmployeeId: undefined,
+                assignedToName: undefined,
+                status: 'المخزن',
+              }
+            : a
+        )
+      );
+    }
+  };
+
+  // Handle Update Loan
+  const handleUpdateLoan = (updatedLoan: Loan) => {
+    setLoans((prev) =>
+      prev.map((loan) => (loan.id === updatedLoan.id ? updatedLoan : loan))
+    );
+
+    setPayrollRecords((prev) =>
+      prev.map((p) =>
+        p.employeeId === updatedLoan.employeeId
+          ? {
+              ...p,
+              loanInstallment: updatedLoan.monthlyInstallment,
+              netSalary:
+                p.baseSalary +
+                p.allowances +
+                p.overtimePay -
+                p.deductions -
+                p.latePenaltyDeduction -
+                updatedLoan.monthlyInstallment -
+                p.socialInsurance,
+            }
+          : p
+      )
+    );
+  };
+
+  // Handle Delete Loan
+  const handleDeleteLoan = (loanId: string) => {
+    if (window.confirm('هل أنت متأكد من رغبتك في حذف هذه السلفة؟')) {
+      const loanToDelete = loans.find(l => l.id === loanId);
+      setLoans((prev) => prev.filter((l) => l.id !== loanId));
+
+      if (loanToDelete) {
+        setPayrollRecords((prev) =>
+          prev.map((p) =>
+            p.employeeId === loanToDelete.employeeId
+              ? {
+                  ...p,
+                  loanInstallment: 0,
+                  netSalary:
+                    p.baseSalary +
+                    p.allowances +
+                    p.overtimePay -
+                    p.deductions -
+                    p.latePenaltyDeduction -
+                    p.socialInsurance,
+                }
+              : p
+          )
+        );
+      }
+    }
+  };
+
+  // Handle Update Asset
+  const handleUpdateAsset = (updatedAsset: Asset) => {
+    setAssets((prev) =>
+      prev.map((asset) => (asset.id === updatedAsset.id ? updatedAsset : asset))
+    );
+  };
+
+  // Handle Delete Asset
+  const handleDeleteAsset = (assetId: string) => {
+    if (window.confirm('هل أنت متأكد من رغبتك في حذف هذا الأصل/العهدة؟')) {
+      setAssets((prev) => prev.filter((ast) => ast.id !== assetId));
+    }
+  };
+
   // Update Attendance
   const handleUpdateAttendanceRecord = (updatedRec: AttendanceRecord) => {
     setAttendanceRecords((prev) =>
@@ -134,30 +277,102 @@ export default function App() {
     );
   };
 
+  const handleAddAttendanceRecord = (newRec: AttendanceRecord) => {
+    setAttendanceRecords((prev) => [...prev, newRec]);
+  };
+
   // Add Shift
   const handleAddShift = (shift: Shift) => {
     setShifts((prev) => [...prev, shift]);
   };
 
-  // Approve Payroll & Lock
+  // Update Shift
+  const handleUpdateShift = (updatedShift: Shift) => {
+    setShifts((prev) =>
+      prev.map((s) => (s.id === updatedShift.id ? updatedShift : s))
+    );
+  };
+
+  // Approve / Unlock Payroll
   const handleApprovePayroll = (month: string) => {
-    setPayrollRecords((prev) =>
-      prev.map((p) =>
+    setPayrollRecords((prev) => {
+      const monthRecs = prev.filter((p) => p.month === month);
+      const isAllApproved = monthRecs.length > 0 && monthRecs.every((p) => p.status === 'approved');
+      const targetStatus = isAllApproved ? 'draft' : 'approved';
+
+      return prev.map((p) =>
         p.month === month
           ? {
               ...p,
-              status: 'approved',
-              approvalDate: new Date().toISOString().split('T')[0],
-              approverName: 'مدير الموارد البشرية',
+              status: targetStatus,
+              approvalDate: targetStatus === 'approved' ? new Date().toISOString().split('T')[0] : undefined,
+              approverName: targetStatus === 'approved' ? 'مدير الموارد البشرية' : undefined,
             }
           : p
-      )
-    );
+      );
+    });
 
     // Resolve payroll alerts
     setAlerts((prev) =>
       prev.map((a) => (a.category === 'payroll' ? { ...a, resolved: true } : a))
     );
+  };
+
+  // Update Payroll Record
+  const handleUpdatePayrollRecord = (updatedRec: PayrollRecord) => {
+    setPayrollRecords((prev) =>
+      prev.map((p) => (p.id === updatedRec.id ? updatedRec : p))
+    );
+  };
+
+  // Generate payroll for a given month
+  const handleGeneratePayroll = (month: string) => {
+    const existing = payrollRecords.some((p) => p.month === month);
+    if (existing) return;
+
+    const newRecords: PayrollRecord[] = employees.map((emp) => {
+      const empLoan = loans.find(l => l.employeeId === emp.id && l.status === 'نشط');
+      const loanInstallment = empLoan ? empLoan.monthlyInstallment : 0;
+
+      return {
+        id: `pay-${emp.id}-${month}-${Date.now()}`,
+        employeeId: emp.id,
+        employeeName: emp.name,
+        employeeCode: emp.employeeCode,
+        position: emp.position,
+        department: emp.department,
+        month: month,
+        baseSalary: emp.baseSalary,
+        allowances: emp.housingAllowance + emp.transportAllowance + emp.otherAllowances,
+        overtimeHours: 0,
+        overtimeRate: 1.5,
+        overtimePay: 0,
+        overtimeHoursDay: 0,
+        overtimeHoursNight: 0,
+        overtimeRateDay: 1.5,
+        overtimeRateNight: 2.0,
+        fridayOvertimeHours: 0,
+        fridayOvertimeRate: 2.0,
+        fridayOvertimePay: 0,
+        bonus: 0,
+        deductions: 0,
+        latePenaltyDeduction: 0,
+        loanInstallment: loanInstallment,
+        socialInsurance: emp.gosiInsurance,
+        netSalary:
+          emp.baseSalary +
+          emp.housingAllowance +
+          emp.transportAllowance +
+          emp.otherAllowances -
+          loanInstallment -
+          emp.gosiInsurance,
+        status: 'draft',
+      };
+    });
+
+    if (newRecords.length > 0) {
+      setPayrollRecords((prev) => [...newRecords, ...prev]);
+    }
   };
 
   // Add Loan
@@ -214,6 +429,44 @@ export default function App() {
     );
   };
 
+  const handleLogin = (password: string) => {
+    if (password === '1001') {
+      localStorage.setItem('isAuthenticated', 'true');
+      setIsAuthenticated(true);
+      return { success: true };
+    }
+    if (password === '0000') {
+      let trialStart = localStorage.getItem('trialStartDate');
+      if (!trialStart) {
+        trialStart = new Date().toISOString();
+        localStorage.setItem('trialStartDate', trialStart);
+      }
+      
+      const startDate = new Date(trialStart);
+      const now = new Date();
+      const diffTime = Math.abs(now.getTime() - startDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays > 7) {
+        return { success: false, message: 'انتهت فترة التجربة (7 أيام). يرجى التواصل مع الإدارة.' };
+      }
+      
+      localStorage.setItem('isAuthenticated', 'true');
+      setIsAuthenticated(true);
+      return { success: true };
+    }
+    return { success: false, message: 'كلمة المرور غير صحيحة' };
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('isAuthenticated');
+    setIsAuthenticated(false);
+  };
+
+  if (!isAuthenticated) {
+    return <LoginView onLogin={handleLogin} />;
+  }
+
   return (
     <div className="min-h-screen bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 flex transition-colors font-sans" dir="rtl">
       {/* Right Sidebar Navigation */}
@@ -223,6 +476,7 @@ export default function App() {
         darkMode={darkMode}
         setDarkMode={setDarkMode}
         unresolvedAlertsCount={alerts.filter((a) => !a.resolved).length}
+        onLogout={handleLogout}
       />
 
       {/* Main Content View Container */}
@@ -283,7 +537,23 @@ export default function App() {
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}
               onAddEmployee={handleAddEmployee}
+              onUpdateEmployee={handleUpdateEmployee}
+              onDeleteEmployee={handleDeleteEmployee}
               currencySymbol={currencySymbol}
+            />
+          )}
+
+          {activeTab === 'employee_effects' && (
+            <EmployeeEffectsView
+              employees={employees}
+              attendance={attendanceRecords}
+              payroll={payrollRecords}
+              currencySymbol={currencySymbol}
+              departments={departments}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              onUpdateAttendanceRecord={handleUpdateAttendanceRecord}
+              onAddAttendanceRecord={handleAddAttendanceRecord}
             />
           )}
 
@@ -293,13 +563,18 @@ export default function App() {
               shifts={shifts}
               onUpdateAttendanceRecord={handleUpdateAttendanceRecord}
               onAddShift={handleAddShift}
+              onUpdateShift={handleUpdateShift}
             />
           )}
 
           {activeTab === 'payroll' && (
             <PayrollView
               payrollRecords={payrollRecords}
+              employees={employees}
+              departments={departments}
               onApprovePayroll={handleApprovePayroll}
+              onUpdatePayrollRecord={handleUpdatePayrollRecord}
+              onGeneratePayroll={handleGeneratePayroll}
               currencySymbol={currencySymbol}
             />
           )}
@@ -312,6 +587,10 @@ export default function App() {
               onAddLoan={handleAddLoan}
               onAddAsset={handleAddAsset}
               onAssignAsset={handleAssignAsset}
+              onUpdateLoan={handleUpdateLoan}
+              onDeleteLoan={handleDeleteLoan}
+              onUpdateAsset={handleUpdateAsset}
+              onDeleteAsset={handleDeleteAsset}
               currencySymbol={currencySymbol}
             />
           )}
@@ -340,6 +619,14 @@ export default function App() {
 
           {activeTab === 'database' && (
             <DatabaseView />
+          )}
+
+          {activeTab === 'documents' && (
+            <DocumentsView
+              documents={documents}
+              onAddDocument={handleAddDocument}
+              onDeleteDocument={handleDeleteDocument}
+            />
           )}
         </main>
       </div>

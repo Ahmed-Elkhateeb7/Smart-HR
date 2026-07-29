@@ -1,6 +1,6 @@
-import React from 'react';
-import { X, Printer, ShieldCheck, Download, Building2 } from 'lucide-react';
-import { PayrollRecord } from '../types';
+import React from "react";
+import { X, Printer, ShieldCheck, Download, Building2 } from "lucide-react";
+import { PayrollRecord } from "../types";
 
 interface PayslipModalProps {
   payrollRecord: PayrollRecord;
@@ -17,7 +17,16 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({
     window.print();
   };
 
-  const totalEarnings = payrollRecord.baseSalary + payrollRecord.allowances + payrollRecord.overtimePay;
+  const overtimeHoursDay = payrollRecord.overtimeHoursDay || 0;
+  const overtimeHoursNight = payrollRecord.overtimeHoursNight || 0;
+  const fridayOvertimeHours = payrollRecord.fridayOvertimeHours || 0;
+  const bonus = payrollRecord.bonus || 0;
+
+  const totalEarnings =
+    payrollRecord.baseSalary +
+    payrollRecord.allowances +
+    payrollRecord.overtimePay +
+    bonus;
   const totalDeductions =
     payrollRecord.deductions +
     payrollRecord.latePenaltyDeduction +
@@ -62,41 +71,69 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({
                 HR
               </div>
               <div>
-                <h2 className="text-base font-black text-slate-900">شركة الحلول المتقدمة الذكية (Smart HR)</h2>
-                <p className="text-[11px] text-slate-500">الرقم الضريبي: 310987654300003 | السجل التجاري: 1010987654</p>
-                <p className="text-[10px] text-blue-600 font-bold mt-0.5">قسيمة راتب شهر: {payrollRecord.month}</p>
+                <h2 className="text-base font-black text-slate-900">
+                  شركة الحلول المتقدمة الذكية (Smart HR)
+                </h2>
+                <p className="text-[11px] text-slate-500">
+                  الرقم الضريبي: 310987654300003 | السجل التجاري: 1010987654
+                </p>
+                <p className="text-[10px] text-blue-600 font-bold mt-0.5">
+                  قسيمة راتب شهر: {payrollRecord.month}
+                </p>
               </div>
             </div>
 
             <div className="text-left text-xs">
               <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 font-black text-[11px]">
-                {payrollRecord.status === 'approved' ? 'معتمد رسمياً' : 'مسودة قسيمة'}
+                {payrollRecord.status === "approved"
+                  ? "معتمد رسمياً"
+                  : "مسودة قسيمة"}
               </span>
-              <p className="text-[10px] text-slate-400 mt-1">رمز القسيمة: {payrollRecord.id}</p>
+              <p className="text-[10px] text-slate-400 mt-1">
+                رمز القسيمة: {payrollRecord.id}
+              </p>
             </div>
           </div>
 
           {/* Employee Info Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs bg-white p-3.5 rounded-xl border border-slate-200">
             <div>
-              <span className="text-[10px] text-slate-400 block">اسم الموظف:</span>
-              <span className="font-extrabold text-slate-900">{payrollRecord.employeeName}</span>
+              <span className="text-[10px] text-slate-400 block">
+                اسم الموظف:
+              </span>
+              <span className="font-extrabold text-slate-900">
+                {payrollRecord.employeeName}
+              </span>
             </div>
             <div>
-              <span className="text-[10px] text-slate-400 block">الرقم الوظيفي:</span>
-              <span className="font-bold text-slate-800">{payrollRecord.employeeCode}</span>
+              <span className="text-[10px] text-slate-400 block">
+                الرقم الوظيفي:
+              </span>
+              <span className="font-bold text-slate-800">
+                {payrollRecord.employeeCode}
+              </span>
             </div>
             <div>
-              <span className="text-[10px] text-slate-400 block">المسمى الوظيفي:</span>
-              <span className="font-bold text-slate-800">{payrollRecord.position}</span>
+              <span className="text-[10px] text-slate-400 block">
+                المسمى الوظيفي:
+              </span>
+              <span className="font-bold text-slate-800">
+                {payrollRecord.position}
+              </span>
             </div>
             <div>
               <span className="text-[10px] text-slate-400 block">القسم:</span>
-              <span className="font-bold text-slate-800">{payrollRecord.department}</span>
+              <span className="font-bold text-slate-800">
+                {payrollRecord.department}
+              </span>
             </div>
             <div>
-              <span className="text-[10px] text-slate-400 block">تاريخ الإصدار:</span>
-              <span className="font-bold text-slate-800">{payrollRecord.approvalDate || '2026-07-26'}</span>
+              <span className="text-[10px] text-slate-400 block">
+                تاريخ الإصدار:
+              </span>
+              <span className="font-bold text-slate-800">
+                {payrollRecord.approvalDate || "2026-07-26"}
+              </span>
             </div>
           </div>
 
@@ -110,19 +147,95 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({
               <div className="p-3 space-y-2">
                 <div className="flex justify-between">
                   <span className="text-slate-600">الراتب الأساسي:</span>
-                  <span className="font-extrabold">{payrollRecord.baseSalary.toLocaleString()} {currencySymbol}</span>
+                  <span className="font-extrabold">
+                    {payrollRecord.baseSalary.toLocaleString()} {currencySymbol}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-600">البدلات المعتمدة:</span>
-                  <span className="font-bold text-emerald-600">+{payrollRecord.allowances.toLocaleString()} {currencySymbol}</span>
+                  <span className="font-bold text-emerald-600">
+                    +{payrollRecord.allowances.toLocaleString()}{" "}
+                    {currencySymbol}
+                  </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-600">ساعات إضافية ({payrollRecord.overtimeHours} س):</span>
-                  <span className="font-bold text-emerald-600">+{payrollRecord.overtimePay.toLocaleString()} {currencySymbol}</span>
-                </div>
+                {overtimeHoursDay > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">
+                      إضافي نهاري ({overtimeHoursDay} س ×{" "}
+                      {payrollRecord.overtimeRateDay || 1.5}):
+                    </span>
+                    <span className="font-bold text-emerald-600">
+                      +
+                      {Math.round(
+                        overtimeHoursDay *
+                          (payrollRecord.baseSalary / 240) *
+                          (payrollRecord.overtimeRateDay || 1.5),
+                      ).toLocaleString()}{" "}
+                      {currencySymbol}
+                    </span>
+                  </div>
+                )}
+                {overtimeHoursNight > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">
+                      إضافي ليلي ({overtimeHoursNight} س ×{" "}
+                      {payrollRecord.overtimeRateNight || 2.0}):
+                    </span>
+                    <span className="font-bold text-emerald-600">
+                      +
+                      {Math.round(
+                        overtimeHoursNight *
+                          (payrollRecord.baseSalary / 240) *
+                          (payrollRecord.overtimeRateNight || 2.0),
+                      ).toLocaleString()}{" "}
+                      {currencySymbol}
+                    </span>
+                  </div>
+                )}
+                {fridayOvertimeHours > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">
+                      إضافي يوم الجمعة ({fridayOvertimeHours} س ×{" "}
+                      {payrollRecord.fridayOvertimeRate || 2.0}):
+                    </span>
+                    <span className="font-bold text-emerald-600">
+                      +
+                      {Math.round(
+                        fridayOvertimeHours *
+                          (payrollRecord.baseSalary / 240) *
+                          (payrollRecord.fridayOvertimeRate || 2.0),
+                      ).toLocaleString()}{" "}
+                      {currencySymbol}
+                    </span>
+                  </div>
+                )}
+                {overtimeHoursDay === 0 &&
+                  overtimeHoursNight === 0 &&
+                  fridayOvertimeHours === 0 &&
+                  payrollRecord.overtimePay > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">
+                        ساعات إضافية عامة ({payrollRecord.overtimeHours} س):
+                      </span>
+                      <span className="font-bold text-emerald-600">
+                        +{payrollRecord.overtimePay.toLocaleString()}{" "}
+                        {currencySymbol}
+                      </span>
+                    </div>
+                  )}
+                {bonus > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">الحوافز والمكافآت:</span>
+                    <span className="font-bold text-emerald-600">
+                      +{bonus.toLocaleString()} {currencySymbol}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between pt-2 border-t border-slate-200 font-black text-slate-900">
                   <span>إجمالي الاستحقاق:</span>
-                  <span className="text-emerald-600">{totalEarnings.toLocaleString()} {currencySymbol}</span>
+                  <span className="text-emerald-600">
+                    {totalEarnings.toLocaleString()} {currencySymbol}
+                  </span>
                 </div>
               </div>
             </div>
@@ -134,20 +247,33 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({
               </div>
               <div className="p-3 space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-slate-600">خصم التأمينات الاجتماعية (GOSI):</span>
-                  <span className="font-bold text-red-600">-{payrollRecord.socialInsurance.toLocaleString()} {currencySymbol}</span>
+                  <span className="text-slate-600">
+                    خصم التأمينات الاجتماعية:
+                  </span>
+                  <span className="font-bold text-red-600">
+                    -{payrollRecord.socialInsurance.toLocaleString()}{" "}
+                    {currencySymbol}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-600">قسط السلفة التلقائي:</span>
-                  <span className="font-bold text-red-600">-{payrollRecord.loanInstallment.toLocaleString()} {currencySymbol}</span>
+                  <span className="font-bold text-red-600">
+                    -{payrollRecord.loanInstallment.toLocaleString()}{" "}
+                    {currencySymbol}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-600">خصم التأخير والجزاءات:</span>
-                  <span className="font-bold text-red-600">-{payrollRecord.latePenaltyDeduction.toLocaleString()} {currencySymbol}</span>
+                  <span className="font-bold text-red-600">
+                    -{payrollRecord.latePenaltyDeduction.toLocaleString()}{" "}
+                    {currencySymbol}
+                  </span>
                 </div>
                 <div className="flex justify-between pt-2 border-t border-slate-200 font-black text-slate-900">
                   <span>إجمالي الخصومات:</span>
-                  <span className="text-red-600">-{totalDeductions.toLocaleString()} {currencySymbol}</span>
+                  <span className="text-red-600">
+                    -{totalDeductions.toLocaleString()} {currencySymbol}
+                  </span>
                 </div>
               </div>
             </div>
@@ -156,12 +282,18 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({
           {/* Net Amount Box */}
           <div className="p-4 rounded-2xl bg-slate-100 dark:bg-gradient-to-r dark:from-slate-900 dark:to-blue-950 text-slate-900 dark:text-white flex items-center justify-between shadow-sm">
             <div>
-              <span className="text-xs text-blue-300 font-bold block">الصافي المستحق للتحويل للبنك</span>
-              <span className="text-2xl font-black">{payrollRecord.netSalary.toLocaleString()} {currencySymbol}</span>
+              <span className="text-xs text-blue-300 font-bold block">
+                الصافي المستحق للتحويل للبنك
+              </span>
+              <span className="text-2xl font-black">
+                {payrollRecord.netSalary.toLocaleString()} {currencySymbol}
+              </span>
             </div>
             <div className="text-left text-[10px] text-slate-300">
               <p>تم الحساب وفق سياسات الموارد البشرية</p>
-              <p className="text-emerald-400 font-bold mt-0.5">توقيع رقمي موثق ✓</p>
+              <p className="text-emerald-400 font-bold mt-0.5">
+                توقيع رقمي موثق ✓
+              </p>
             </div>
           </div>
         </div>

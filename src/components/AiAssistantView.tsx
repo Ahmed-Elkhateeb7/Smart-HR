@@ -390,10 +390,10 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
               حساب الساعات الإضافية Overtime
             </button>
             <button
-              onClick={() => setChatInput('كيف يتم إقفال مسير المرتبات في النظام وتفادي الأخطاء؟')}
+              onClick={() => setChatInput('كيف يتم إقفال جدول المرتبات في النظام وتفادي الأخطاء؟')}
               className="px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-blue-100 font-bold shrink-0"
             >
-              اعتماد مسير الرواتب
+              اعتماد كشف المرتبات
             </button>
           </div>
 

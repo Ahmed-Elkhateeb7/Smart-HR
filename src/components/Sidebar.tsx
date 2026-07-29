@@ -5,6 +5,7 @@ import {
   Clock,
   Calculator,
   Briefcase,
+  Activity,
   Sparkles,
   BarChart3,
   Settings,
@@ -14,7 +15,9 @@ import {
   ChevronLeft,
   Moon,
   Sun,
-  Database
+  Database,
+  FileCheck,
+  LogOut
 } from 'lucide-react';
 import { TabType } from '../types';
 
@@ -29,6 +32,7 @@ interface SidebarProps {
   setDarkMode?: (val: boolean) => void;
   isCollapsed?: boolean;
   setIsCollapsed?: (val: boolean) => void;
+  onLogout?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -42,6 +46,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setDarkMode,
   isCollapsed: propIsCollapsed,
   setIsCollapsed: propSetIsCollapsed,
+  onLogout
 }) => {
   const [internalCollapsed, setInternalCollapsed] = React.useState(false);
 
@@ -78,13 +83,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Users,
     },
     {
+      id: 'employee_effects' as TabType,
+      label: 'مؤثرات الموظفين',
+      icon: Activity,
+    },
+    {
       id: 'attendance' as TabType,
-      label: 'الحضور والدوام',
+      label: 'الحضور والانصراف',
       icon: Clock,
     },
     {
       id: 'payroll' as TabType,
-      label: 'مسير الرواتب',
+      label: 'جدول المرتبات',
       icon: Calculator,
     },
     {
@@ -107,6 +117,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'database' as TabType,
       label: 'قاعدة البيانات',
       icon: Database,
+    },
+    {
+      id: 'documents' as TabType,
+      label: 'الوثائق المعتمدة',
+      icon: FileCheck,
     },
     {
       id: 'settings' as TabType,
@@ -247,6 +262,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
         )}
+
+        {/* Logout Button */}
+        <button
+          id="sidebar-logout-btn"
+          onClick={onLogout}
+          className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40"
+          title="تسجيل الخروج"
+        >
+          <LogOut className="w-4 h-4 shrink-0" />
+          {!isCollapsed && <span>تسجيل الخروج</span>}
+        </button>
       </div>
     </aside>
   );

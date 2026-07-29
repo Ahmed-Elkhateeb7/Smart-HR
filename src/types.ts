@@ -7,7 +7,9 @@ export type TabType =
   | 'ai-assistant'
   | 'reports'
   | 'settings'
-  | 'database';
+  | 'database'
+  | 'documents'
+  | 'employee_effects';
 
 export type EmployeeStatus = 'active' | 'on_leave' | 'suspended' | 'resigned';
 
@@ -27,7 +29,7 @@ export interface Employee {
   gosiInsurance: number; // Insurance deduction
   iqamaOrIdNumber: string;
   iqamaExpiryDate: string; // YYYY-MM-DD
-  contractType: 'مصري' | 'أجنبي' | 'سعودي' | 'مقيم' | 'دوام جزئي' | 'عقد محدد';
+  contractType: 'مصري';
   contractExpiryDate: string; // YYYY-MM-DD
   joinDate: string; // YYYY-MM-DD
   status: EmployeeStatus;
@@ -35,7 +37,7 @@ export interface Employee {
   bankName: string;
 }
 
-export type AttendanceStatus = 'present' | 'absent' | 'late' | 'leave' | 'early_leave';
+export type AttendanceStatus = 'present' | 'absent' | 'late' | 'leave' | 'early_leave' | 'sick_leave' | 'casual_leave' | 'annual_leave' | 'mission';
 
 export interface AttendanceRecord {
   id: string;
@@ -76,6 +78,14 @@ export interface PayrollRecord {
   overtimeHours: number;
   overtimeRate: number;
   overtimePay: number;
+  overtimeHoursDay?: number;
+  overtimeHoursNight?: number;
+  overtimeRateDay?: number;
+  overtimeRateNight?: number;
+  fridayOvertimeHours?: number;
+  fridayOvertimeRate?: number;
+  fridayOvertimePay?: number;
+  bonus?: number;
   deductions: number;
   latePenaltyDeduction: number;
   loanInstallment: number;
@@ -104,7 +114,7 @@ export interface Asset {
   id: string;
   assetName: string;
   assetCode: string;
-  category: 'لاب توب' | 'هاتف ذكي' | 'سيارة' | 'معدات مكتبية' | 'شاشة / ملحقات';
+  category: string;
   serialNumber: string;
   assignedToEmployeeId?: string;
   assignedToName?: string;
@@ -144,4 +154,17 @@ export interface CompanySettings {
   enableSmartGuard: boolean;
   currencySymbol: string; // "ج.م"
   workDaysPerMonth: number; // e.g. 22 or 30
+}
+
+export interface DocumentItem {
+  id: string;
+  title: string;
+  category: 'قانوني' | 'إداري' | 'مالي' | 'موارد بشرية' | 'أخرى';
+  fileName: string;
+  fileSize: string;
+  uploadDate: string;
+  uploadedBy: string;
+  status: 'معتمد' | 'قيد المراجعة' | 'مؤرشف';
+  description?: string;
+  fileUrl?: string;
 }

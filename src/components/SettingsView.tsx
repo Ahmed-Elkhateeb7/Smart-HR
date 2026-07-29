@@ -24,11 +24,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   currencySymbol,
   setCurrencySymbol,
 }) => {
-  const [companyName, setCompanyName] = useState('شركة الحلول المتقدمة الذكية (Smart HR)');
-  const [taxNumber, setTaxNumber] = useState('310987654300003');
-  const [crNumber, setCrNumber] = useState('1010987654');
+  const [companyName, setCompanyName] = useState('شركة مصر للحلول المتقدمة الذكية (Smart HR Egypt)');
+  const [taxNumber, setTaxNumber] = useState('492-811-309');
+  const [crNumber, setCrNumber] = useState('102948');
   const [gracePeriod, setGracePeriod] = useState(15);
-  const [gosiRate, setGosiRate] = useState(9.75);
+  const [gosiRate, setGosiRate] = useState(11);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   const handleSave = (e: React.FormEvent) => {
@@ -80,6 +80,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           <div className="space-y-3">
+            <div className="flex flex-col items-center gap-4 py-4 border-b border-slate-100 dark:border-slate-700">
+               <div className="w-24 h-24 rounded-2xl bg-slate-50 dark:bg-slate-900 border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center overflow-hidden relative">
+                  <div className="text-center p-2 text-slate-400">
+                     <Building2 className="w-8 h-8 mx-auto mb-1 opacity-50" />
+                     <span className="text-[9px]">شعار الشركة</span>
+                  </div>
+                  <input type="file" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" accept="image/*" />
+               </div>
+            </div>
+            
             <div>
               <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">اسم المنشأة / الشركة</label>
               <input
@@ -127,12 +137,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <select
                 value={currencySymbol}
                 onChange={(e) => setCurrencySymbol(e.target.value)}
-                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-bold cursor-not-allowed"
+                disabled
               >
                 <option value="ج.م">جنيه مصري (ج.م)</option>
-                <option value="ر.س">ريال سعودي (ر.س)</option>
-                <option value="د.إ">درهم إماراتي (د.إ)</option>
-                <option value="$">دولار أمريكي ($)</option>
               </select>
             </div>
 
@@ -147,7 +155,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
 
             <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">نسبة خصم التأمينات الاجتماعية GOSI للموظف (%)</label>
+              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">نسبة خصم التأمينات الاجتماعية للموظف (%)</label>
               <input
                 type="number"
                 step="0.01"
@@ -193,6 +201,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
       </form>
+
+      {/* System Creators / Credits */}
+      <div className="mt-12 flex flex-col items-center justify-center p-6 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 dark:from-slate-800/50 dark:to-slate-800/50 rounded-3xl border border-blue-100/50 dark:border-slate-700/50 shadow-sm text-center">
+         <span className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-4 block tracking-wider">تم تصميم وتطوير النظام بواسطة</span>
+         <div className="flex items-center justify-center gap-8 md:gap-16">
+            <div className="flex flex-col items-center">
+               <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 p-[2px] shadow-md shadow-blue-500/20 mb-3">
+                  <div className="w-full h-full rounded-full bg-white dark:bg-slate-900 flex items-center justify-center border-2 border-white dark:border-slate-800 overflow-hidden">
+                     <span className="font-extrabold text-blue-600 dark:text-blue-400 text-lg">AB</span>
+                  </div>
+               </div>
+               <span className="font-extrabold text-slate-800 dark:text-slate-200 text-sm">أحمد بيومي</span>
+               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-1">مؤسس ومهندس النظام</span>
+            </div>
+            
+            <div className="flex flex-col items-center">
+               <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-600 p-[2px] shadow-md shadow-emerald-500/20 mb-3">
+                  <div className="w-full h-full rounded-full bg-white dark:bg-slate-900 flex items-center justify-center border-2 border-white dark:border-slate-800 overflow-hidden">
+                     <span className="font-extrabold text-emerald-600 dark:text-emerald-400 text-lg">AK</span>
+                  </div>
+               </div>
+               <span className="font-extrabold text-slate-800 dark:text-slate-200 text-sm">احمد الخطيب</span>
+               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-1">المطور ومهندس البرمجيات</span>
+            </div>
+         </div>
+      </div>
     </div>
   );
 };

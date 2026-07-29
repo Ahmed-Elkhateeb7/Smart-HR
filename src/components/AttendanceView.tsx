@@ -15,7 +15,9 @@ import {
   Building2,
   X,
   QrCode,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Settings,
+  Save
 } from 'lucide-react';
 import { AttendanceRecord, Shift, AttendanceStatus } from '../types';
 
@@ -24,6 +26,7 @@ interface AttendanceViewProps {
   shifts: Shift[];
   onUpdateAttendanceRecord: (record: AttendanceRecord) => void;
   onAddShift: (shift: Shift) => void;
+  onUpdateShift?: (shift: Shift) => void;
 }
 
 export const AttendanceView: React.FC<AttendanceViewProps> = ({
@@ -31,11 +34,17 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   shifts,
   onUpdateAttendanceRecord,
   onAddShift,
+  onUpdateShift,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'daily' | 'shifts'>('daily');
   const [selectedDate, setSelectedDate] = useState<string>('2026-07-26');
   const [editingRecord, setEditingRecord] = useState<AttendanceRecord | null>(null);
   const [showShiftModal, setShowShiftModal] = useState(false);
+
+  // Edit Shift State & Batch Edit Daily Attendance State
+  const [editingShift, setEditingShift] = useState<Shift | null>(null);
+  const [showBatchAttendanceEditModal, setShowBatchAttendanceEditModal] = useState(false);
+  const [batchAttendanceData, setBatchAttendanceData] = useState<AttendanceRecord[]>([]);
 
   // Modals & Action states
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -100,6 +109,26 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
     triggerNotification(`تم إضافة الوردية الجديدة "${created.name}" بنجاح.`);
   };
 
+  const handleSaveShiftEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingShift) {
+      if (onUpdateShift) {
+        onUpdateShift(editingShift);
+      }
+      triggerNotification(`تم تحديث بيانات ومواعيد الوردية "${editingShift.name}" بنجاح.`);
+      setEditingShift(null);
+    }
+  };
+
+  const handleSaveBatchAttendance = (e: React.FormEvent) => {
+    e.preventDefault();
+    batchAttendanceData.forEach((rec) => {
+      onUpdateAttendanceRecord(rec);
+    });
+    setShowBatchAttendanceEditModal(false);
+    triggerNotification(`تم تحديث وحفظ كافة التعديلات على جدول الحضور اليومي بنجاح!`);
+  };
+
   // Status Badge Helper
   const getStatusBadge = (status: AttendanceStatus) => {
     switch (status) {
@@ -113,6 +142,14 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         return { label: 'إجازة معتمدة', color: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' };
       case 'early_leave':
         return { label: 'انصراف مبكر', color: 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' };
+      case 'sick_leave':
+        return { label: 'إجازة مرضية', color: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' };
+      case 'casual_leave':
+        return { label: 'إجازة عارضة', color: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' };
+      case 'annual_leave':
+        return { label: 'إجازة اعتيادية', color: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' };
+      case 'mission':
+        return { label: 'مأمورية عمل', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300' };
       default:
         return { label: 'غير محدد', color: 'bg-slate-100 text-slate-700' };
     }
@@ -174,6 +211,16 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           <div className="flex flex-wrap items-center justify-end gap-2 mb-2">
             <button
               onClick={() => {
+                setBatchAttendanceData(attendance.map((r) => ({ ...r })));
+                setShowBatchAttendanceEditModal(true);
+              }}
+              className="px-3.5 py-1.5 rounded-full border border-transparent text-white text-xs font-bold bg-indigo-600 hover:bg-indigo-700 transition-colors flex items-center gap-1.5 shadow-sm shadow-indigo-600/30 active:scale-98 cursor-pointer"
+            >
+              <Edit2 className="w-4 h-4" />
+              <span>تعديل جدول الحضور اليومي</span>
+            </button>
+            <button
+              onClick={() => {
                 setSelectedDate('');
                 triggerNotification('تم عرض كافة سجلات الحضور لجميع الفترات.');
               }}
@@ -213,13 +260,6 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               <Download className="w-4 h-4" />
               استيراد من ZKTeco / Excel
             </button>
-            <button
-              onClick={() => setShowMobileLinksModal(true)}
-              className="px-3 py-1.5 rounded-full border border-transparent text-white text-xs font-bold bg-emerald-500 hover:bg-emerald-600 transition-colors flex items-center gap-1.5 shadow-sm shadow-emerald-500/20 active:scale-98"
-            >
-              <Smartphone className="w-4 h-4" />
-              لينكات بصمة الموبايل
-            </button>
           </div>
 
           {/* Daily Summary Metrics & Date Selection */}
@@ -235,7 +275,17 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               />
             </div>
 
-            <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-3 text-xs">
+              <button
+                onClick={() => {
+                  setBatchAttendanceData(attendance.map((r) => ({ ...r })));
+                  setShowBatchAttendanceEditModal(true);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold text-xs border border-indigo-200 dark:border-indigo-800 flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+                <span>تعديل جدول الحضور السريع</span>
+              </button>
               <div className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 px-3 py-1.5 rounded-xl border border-amber-200/60 dark:border-amber-800">
                 <AlertCircle className="w-4 h-4 text-amber-600" />
                 <span className="font-bold">إجمالي دقائق التأخير اليوم: {totalDelaysMinutes} دقيقة</span>
@@ -282,10 +332,11 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                       <td className="p-3.5 text-center">
                         <button
                           onClick={() => setEditingRecord(rec)}
-                          className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-600 dark:text-slate-200 transition-colors"
-                          title="تعديل وقت الحضور والانصراف"
+                          className="px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 text-blue-700 dark:text-blue-300 font-bold text-xs border border-blue-200 dark:border-blue-800/60 flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                          title="تعديل وقت وسجل الحضور"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
+                          <span>تعديل السجل</span>
                         </button>
                       </td>
                     </tr>
@@ -298,51 +349,76 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
       ) : (
         /* Shifts Management Tab */
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
               قائمة الورديات المعتمدة ومواعيد الدوام
             </h3>
-            <button
-              onClick={() => setShowShiftModal(true)}
-              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span>إضافة وردية جديدة</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  if (shifts.length > 0) {
+                    setEditingShift({ ...shifts[0] });
+                  }
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-bold text-xs shadow-sm flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                <Settings className="w-4 h-4 text-blue-400" />
+                <span>تعديل الورديات ومواعيد الدوام</span>
+              </button>
+              <button
+                onClick={() => setShowShiftModal(true)}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm flex items-center gap-2 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>إضافة وردية جديدة</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {shifts.map((shift) => (
               <div
                 key={shift.id}
-                className="p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs space-y-3"
+                className="p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs space-y-3 flex flex-col justify-between"
               >
-                <div className="flex items-center justify-between">
-                  <h4 className="font-extrabold text-sm text-slate-900 dark:text-white">{shift.name}</h4>
-                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
-                    {shift.workingHours} ساعات عمل
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-xl bg-white dark:bg-slate-900 text-xs space-y-1.5">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">بداية ونهاية الوردية:</span>
-                    <span className="font-bold text-slate-800 dark:text-slate-200">
-                      {shift.startTime} - {shift.endTime}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-extrabold text-sm text-slate-900 dark:text-white">{shift.name}</h4>
+                    <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                      {shift.workingHours} ساعات عمل
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">فترة السماح قبل التأخير:</span>
-                    <span className="font-bold text-emerald-600">{shift.gracePeriodMinutes} دقيقة</span>
+
+                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 text-xs space-y-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">بداية ونهاية الوردية:</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200">
+                        {shift.startTime} - {shift.endTime}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">فترة السماح قبل التأخير:</span>
+                      <span className="font-bold text-emerald-600">{shift.gracePeriodMinutes} دقيقة</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1 text-[10px]">
+                    {shift.activeDays.map((day, i) => (
+                      <span key={i} className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-bold text-slate-600 dark:text-slate-300">
+                        {day}
+                      </span>
+                    ))}
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-1 text-[10px]">
-                  {shift.activeDays.map((day, i) => (
-                    <span key={i} className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-bold text-slate-600 dark:text-slate-300">
-                      {day}
-                    </span>
-                  ))}
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60">
+                  <button
+                    onClick={() => setEditingShift({ ...shift })}
+                    className="w-full py-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-bold text-xs border border-blue-200 dark:border-blue-800/60 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>تعديل الوردية ومواعيد الدوام</span>
+                  </button>
                 </div>
               </div>
             ))}
@@ -352,10 +428,10 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
       {/* Edit Attendance Record Modal */}
       {editingRecord && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <form
             onSubmit={handleSaveRecord}
-            className="bg-white dark:bg-slate-800 rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200 dark:border-slate-700 shadow-sm animate-fade-in"
+            className="bg-white dark:bg-slate-800 rounded-3xl max-w-md w-full p-6 space-y-4 border border-slate-200 dark:border-slate-700 shadow-xl animate-fade-in relative z-10"
           >
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
               <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
@@ -364,7 +440,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               <button
                 type="button"
                 onClick={() => setEditingRecord(null)}
-                className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
+                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 cursor-pointer transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -374,15 +450,19 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               <div>
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">حالة الحضور</label>
                 <select
-                  value={editingRecord.status}
+                  value={editingRecord.status || 'present'}
                   onChange={(e) => setEditingRecord({ ...editingRecord, status: e.target.value as any })}
-                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold cursor-pointer transition-colors focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 >
-                  <option value="present">حاضر (في الوقت)</option>
-                  <option value="late">متأخر</option>
-                  <option value="absent">غائب</option>
-                  <option value="leave">إجازة</option>
-                  <option value="early_leave">انصراف مبكر</option>
+                  <option value="present" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">حاضر (في الوقت)</option>
+                  <option value="late" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">متأخر</option>
+                  <option value="absent" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">غائب</option>
+                  <option value="leave" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">إجازة</option>
+                  <option value="annual_leave" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">إجازة اعتيادية</option>
+                  <option value="casual_leave" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">إجازة عارضة</option>
+                  <option value="sick_leave" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">إجازة مرضية</option>
+                  <option value="mission" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">مأمورية عمل</option>
+                  <option value="early_leave" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">انصراف مبكر</option>
                 </select>
               </div>
 
@@ -540,10 +620,10 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
       {/* Batch Attendance Modal */}
       {showBatchModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <form
             onSubmit={handleBatchSubmit}
-            className="bg-white dark:bg-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-4 border border-slate-200 dark:border-slate-700 shadow-xl"
+            className="bg-white dark:bg-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-4 border border-slate-200 dark:border-slate-700 shadow-xl relative z-10"
           >
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
               <div className="flex items-center gap-2 text-teal-600">
@@ -553,7 +633,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               <button
                 type="button"
                 onClick={() => setShowBatchModal(false)}
-                className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500"
+                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 cursor-pointer transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -565,7 +645,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 <input
                   type="date"
                   defaultValue="2026-07-26"
-                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold"
                 />
               </div>
 
@@ -574,16 +654,16 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 <input
                   type="time"
                   defaultValue="08:00"
-                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold"
                 />
               </div>
 
               <div>
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">الحالة الجماعية</label>
-                <select className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold">
-                  <option value="present">حاضر (في الوقت)</option>
-                  <option value="late">متأخر (تلقائي مع السماح)</option>
-                  <option value="leave">إجازة رسمية جماعية</option>
+                <select className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold cursor-pointer transition-colors focus:ring-2 focus:ring-teal-500 focus:outline-none">
+                  <option value="present" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">حاضر (في الوقت)</option>
+                  <option value="late" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">متأخر (تلقائي مع السماح)</option>
+                  <option value="leave" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">إجازة رسمية جماعية</option>
                 </select>
               </div>
             </div>
@@ -592,13 +672,13 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               <button
                 type="button"
                 onClick={() => setShowBatchModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-700 font-bold text-xs"
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-700 font-bold text-xs cursor-pointer"
               >
                 إلغاء
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-sm shadow-teal-600/20"
+                className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-sm shadow-teal-600/20 cursor-pointer transition-colors"
               >
                 تطبيق وتسجيل الحضور الجماعي
               </button>
@@ -691,6 +771,299 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Edit Shift Modal */}
+      {editingShift && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <form
+            onSubmit={handleSaveShiftEdit}
+            className="bg-white dark:bg-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-4 border border-slate-200 dark:border-slate-700 shadow-xl animate-fade-in relative z-10"
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3">
+              <div className="flex items-center gap-2 text-blue-600">
+                <Settings className="w-5 h-5" />
+                <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                  تعديل الوردية المعتمدة ومواعيد الدوام
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingShift(null)}
+                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              {shifts.length > 1 && (
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    اختر الوردية المراد تعديلها
+                  </label>
+                  <select
+                    value={editingShift.id}
+                    onChange={(e) => {
+                      const found = shifts.find((s) => s.id === e.target.value);
+                      if (found) setEditingShift({ ...found });
+                    }}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold cursor-pointer transition-colors focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    {shifts.map((s) => (
+                      <option key={s.id} value={s.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                        {s.name} ({s.startTime} - {s.endTime})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">اسم الوردية *</label>
+                <input
+                  required
+                  type="text"
+                  value={editingShift.name}
+                  onChange={(e) => setEditingShift({ ...editingShift, name: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">نوع الوردية</label>
+                  <select
+                    value={editingShift.type || 'morning'}
+                    onChange={(e) => setEditingShift({ ...editingShift, type: e.target.value as any })}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold cursor-pointer transition-colors focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    <option value="morning" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">صباحية</option>
+                    <option value="evening" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">مسائية</option>
+                    <option value="night" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">ليلية</option>
+                    <option value="flexible" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">دوام مرن</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">ساعات العمل اليومية</label>
+                  <input
+                    type="number"
+                    value={editingShift.workingHours}
+                    onChange={(e) => setEditingShift({ ...editingShift, workingHours: Number(e.target.value) })}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-blue-600"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">وقت بدء الدوام</label>
+                  <input
+                    type="text"
+                    value={editingShift.startTime}
+                    onChange={(e) => setEditingShift({ ...editingShift, startTime: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">وقت نهاية الدوام</label>
+                  <input
+                    type="text"
+                    value={editingShift.endTime}
+                    onChange={(e) => setEditingShift({ ...editingShift, endTime: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">فترة السماح بالدقائق (قبل احتساب التأخير)</label>
+                <input
+                  type="number"
+                  value={editingShift.gracePeriodMinutes}
+                  onChange={(e) => setEditingShift({ ...editingShift, gracePeriodMinutes: Number(e.target.value) })}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-emerald-600"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">أيام العمل المعتمدة للوردية</label>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'].map((day) => {
+                    const isSelected = editingShift.activeDays.includes(day);
+                    return (
+                      <button
+                        type="button"
+                        key={day}
+                        onClick={() => {
+                          const updatedDays = isSelected
+                            ? editingShift.activeDays.filter((d) => d !== day)
+                            : [...editingShift.activeDays, day];
+                          setEditingShift({ ...editingShift, activeDays: updatedDays });
+                        }}
+                        className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingShift(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-700 font-bold text-xs cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                <Save className="w-4 h-4" />
+                <span>حفظ تعديلات الوردية</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Batch Edit Daily Attendance Modal */}
+      {showBatchAttendanceEditModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <form
+            onSubmit={handleSaveBatchAttendance}
+            className="bg-white dark:bg-slate-800 rounded-3xl max-w-4xl w-full p-6 space-y-4 border border-slate-200 dark:border-slate-700 shadow-2xl animate-fade-in max-h-[90vh] flex flex-col"
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3 shrink-0">
+              <div className="flex items-center gap-2 text-indigo-600">
+                <Edit2 className="w-5 h-5" />
+                <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                  تعديل جدول الحضور والانصراف اليومي المباشر
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBatchAttendanceEditModal(false)}
+                className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 dark:text-slate-400 shrink-0">
+              يمكنك تعديل أوقات الحضور والانصراف، حالة الدوام، ودقائق التأخير لجميع الموظفين بضغطة واحدة:
+            </p>
+
+            <div className="overflow-y-auto overflow-x-auto grow border border-slate-200 dark:border-slate-700 rounded-2xl">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 font-bold sticky top-0 border-b border-slate-200 dark:border-slate-700">
+                  <tr>
+                    <th className="p-3">اسم الموظف</th>
+                    <th className="p-3">الوردية</th>
+                    <th className="p-3">حالة الحضور</th>
+                    <th className="p-3">وقت الحضور</th>
+                    <th className="p-3">وقت الانصراف</th>
+                    <th className="p-3">التأخير (دقيقة)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
+                  {batchAttendanceData.map((rec, idx) => (
+                    <tr key={rec.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                      <td className="p-3 font-bold text-slate-800 dark:text-slate-200">
+                        {rec.employeeName}
+                        <div className="text-[10px] text-slate-400 font-normal">{rec.department}</div>
+                      </td>
+                      <td className="p-3 text-slate-500">{rec.shiftName}</td>
+                      <td className="p-3">
+                        <select
+                          value={rec.status}
+                          onChange={(e) => {
+                            const val = e.target.value as AttendanceStatus;
+                            const updated = [...batchAttendanceData];
+                            updated[idx] = { ...updated[idx], status:val };
+                            setBatchAttendanceData(updated);
+                          }}
+                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-xs"
+                        >
+                          <option value="present">حاضر (في الوقت)</option>
+                          <option value="late">متأخر</option>
+                          <option value="absent">غائب</option>
+                          <option value="leave">إجازة</option>
+                          <option value="annual_leave">إجازة اعتيادية</option>
+                          <option value="casual_leave">إجازة عارضة</option>
+                          <option value="sick_leave">إجازة مرضية</option>
+                          <option value="mission">مأمورية عمل</option>
+                          <option value="early_leave">انصراف مبكر</option>
+                        </select>
+                      </td>
+                      <td className="p-3">
+                        <input
+                          type="text"
+                          value={rec.checkIn}
+                          onChange={(e) => {
+                            const updated = [...batchAttendanceData];
+                            updated[idx] = { ...updated[idx], checkIn: e.target.value };
+                            setBatchAttendanceData(updated);
+                          }}
+                          className="w-20 p-1.5 text-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-emerald-600"
+                        />
+                      </td>
+                      <td className="p-3">
+                        <input
+                          type="text"
+                          value={rec.checkOut}
+                          onChange={(e) => {
+                            const updated = [...batchAttendanceData];
+                            updated[idx] = { ...updated[idx], checkOut: e.target.value };
+                            setBatchAttendanceData(updated);
+                          }}
+                          className="w-20 p-1.5 text-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-blue-600"
+                        />
+                      </td>
+                      <td className="p-3">
+                        <input
+                          type="number"
+                          value={rec.delayMinutes}
+                          onChange={(e) => {
+                            const updated = [...batchAttendanceData];
+                            updated[idx] = { ...updated[idx], delayMinutes: Number(e.target.value) };
+                            setBatchAttendanceData(updated);
+                          }}
+                          className="w-16 p-1.5 text-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-amber-600"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowBatchAttendanceEditModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-700 font-bold text-xs cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                <Save className="w-4 h-4" />
+                <span>حفظ وتطبيق تعديلات الجدول</span>
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>
