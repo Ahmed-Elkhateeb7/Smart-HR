@@ -58,7 +58,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const presentToday = attendance.filter((a) => a.status === 'present' || a.status === 'late').length;
   const absentToday = attendance.filter((a) => a.status === 'absent').length;
   const lateToday = attendance.filter((a) => a.status === 'late').length;
+  const totalDelayMinutes = attendance.reduce((sum, a) => sum + (a.delayMinutes || 0), 0);
   const totalPayrollCost = payroll.reduce((sum, p) => sum + p.netSalary, 0);
+  const isPayrollApproved = payroll.length > 0 && payroll.every(p => p.status === 'approved');
 
   const activeAlerts = alerts.filter((a) => !a.resolved);
 
@@ -139,9 +141,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="text-2xl font-extrabold text-slate-900 dark:text-white">
               {totalEmployees}
             </span>
-            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
+            <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-0.5">
               <TrendingUp className="w-3.5 h-3.5" />
-              +12% هذا العام
+              قوة العمل الحالية
             </span>
           </div>
           <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between text-[11px] text-slate-500">
@@ -195,7 +197,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between text-[11px] text-slate-500">
-            <span>إجمالي التأخيرات: 35 دقيقة</span>
+            <span>إجمالي التأخيرات: {totalDelayMinutes} دقيقة</span>
             <button onClick={() => setActiveTab('attendance')} className="text-blue-600 font-bold hover:underline">
               تفاصيل الدوام
             </button>
@@ -216,7 +218,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </span>
           </div>
           <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between text-[11px]">
-            <span className="text-amber-600 font-bold">حالة المسير: مسودة بانتظار الاعتماد</span>
+            {isPayrollApproved ? (
+              <span className="text-emerald-600 font-bold">حالة المسير: معتمد نهائياً</span>
+            ) : (
+              <span className="text-amber-600 font-bold">حالة المسير: مسودة بانتظار الاعتماد</span>
+            )}
             <button onClick={() => setActiveTab('payroll')} className="text-blue-600 font-bold hover:underline">
               جدول المرتبات
             </button>

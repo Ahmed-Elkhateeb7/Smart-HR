@@ -39,6 +39,19 @@ import {
   DocumentItem
 } from './types';
 
+import {
+  loadAllState,
+  saveEmployees,
+  saveAttendanceRecords,
+  savePayrollRecords,
+  saveLoans,
+  saveAssets,
+  saveAlerts,
+  saveShifts,
+  saveDocuments,
+  saveCurrencySymbol
+} from './utils/storage';
+
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem('isAuthenticated') === 'true';
@@ -46,18 +59,63 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [darkMode, setDarkMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [currencySymbol, setCurrencySymbol] = useState(initialCompanySettings.currencySymbol);
 
-  // Core State
-  const [employees, setEmployees] = useState<Employee[]>(initialEmployees);
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(initialAttendanceRecords);
-  const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>(initialPayrollRecords);
-  const [loans, setLoans] = useState<Loan[]>(initialLoans);
-  const [assets, setAssets] = useState<Asset[]>(initialAssets);
-  const [alerts, setAlerts] = useState<SystemAlert[]>(initialSystemAlerts);
+  // Persistent Core State initialization
+  const [initialLoaded] = useState(() => loadAllState());
+
+  const [currencySymbol, setCurrencySymbol] = useState(initialLoaded.currencySymbol);
+  const [employees, setEmployees] = useState<Employee[]>(initialLoaded.employees);
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(initialLoaded.attendanceRecords);
+  const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>(initialLoaded.payrollRecords);
+  const [loans, setLoans] = useState<Loan[]>(initialLoaded.loans);
+  const [assets, setAssets] = useState<Asset[]>(initialLoaded.assets);
+  const [alerts, setAlerts] = useState<SystemAlert[]>(initialLoaded.alerts);
   const [departments] = useState<Department[]>(initialDepartments);
-  const [shifts, setShifts] = useState<Shift[]>(initialShifts);
-  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [shifts, setShifts] = useState<Shift[]>(initialLoaded.shifts);
+  const [documents, setDocuments] = useState<DocumentItem[]>(initialLoaded.documents);
+
+  // Auto-persist state changes
+  useEffect(() => { saveEmployees(employees); }, [employees]);
+  useEffect(() => { saveAttendanceRecords(attendanceRecords); }, [attendanceRecords]);
+  useEffect(() => { savePayrollRecords(payrollRecords); }, [payrollRecords]);
+  useEffect(() => { saveLoans(loans); }, [loans]);
+  useEffect(() => { saveAssets(assets); }, [assets]);
+  useEffect(() => { saveAlerts(alerts); }, [alerts]);
+  useEffect(() => { saveShifts(shifts); }, [shifts]);
+  useEffect(() => { saveDocuments(documents); }, [documents]);
+  useEffect(() => { saveCurrencySymbol(currencySymbol); }, [currencySymbol]);
+
+  const handleRestoreData = (restored: {
+    employees: Employee[];
+    attendanceRecords: AttendanceRecord[];
+    payrollRecords: PayrollRecord[];
+    loans: Loan[];
+    assets: Asset[];
+    alerts: SystemAlert[];
+    shifts: Shift[];
+    documents: DocumentItem[];
+    currencySymbol: string;
+  }) => {
+    setEmployees(restored.employees);
+    setAttendanceRecords(restored.attendanceRecords);
+    setPayrollRecords(restored.payrollRecords);
+    setLoans(restored.loans);
+    setAssets(restored.assets);
+    setAlerts(restored.alerts);
+    setShifts(restored.shifts);
+    setDocuments(restored.documents);
+    setCurrencySymbol(restored.currencySymbol);
+  };
+
+  const handleClearData = () => {
+    setEmployees([]);
+    setAttendanceRecords([]);
+    setPayrollRecords([]);
+    setLoans([]);
+    setAssets([]);
+    setAlerts([]);
+    setDocuments([]);
+  };
 
   const handleAddDocument = (doc: DocumentItem) => {
     setDocuments((prev) => [doc, ...prev]);
@@ -216,8 +274,7 @@ export default function App() {
               loanInstallment: updatedLoan.monthlyInstallment,
               netSalary:
                 p.baseSalary +
-                p.allowances +
-                p.overtimePay -
+                p.allowances -
                 p.deductions -
                 p.latePenaltyDeduction -
                 updatedLoan.monthlyInstallment -
@@ -243,8 +300,7 @@ export default function App() {
                   loanInstallment: 0,
                   netSalary:
                     p.baseSalary +
-                    p.allowances +
-                    p.overtimePay -
+                    p.allowances -
                     p.deductions -
                     p.latePenaltyDeduction -
                     p.socialInsurance,
@@ -388,8 +444,7 @@ export default function App() {
               loanInstallment: loan.monthlyInstallment,
               netSalary:
                 p.baseSalary +
-                p.allowances +
-                p.overtimePay -
+                p.allowances -
                 p.deductions -
                 p.latePenaltyDeduction -
                 loan.monthlyInstallment -
@@ -618,7 +673,19 @@ export default function App() {
           )}
 
           {activeTab === 'database' && (
-            <DatabaseView />
+            <DatabaseView
+              employees={employees}
+              attendanceRecords={attendanceRecords}
+              payrollRecords={payrollRecords}
+              loans={loans}
+              assets={assets}
+              alerts={alerts}
+              shifts={shifts}
+              documents={documents}
+              currencySymbol={currencySymbol}
+              onRestoreData={handleRestoreData}
+              onClearData={handleClearData}
+            />
           )}
 
           {activeTab === 'documents' && (

@@ -75,6 +75,7 @@ export interface PayrollRecord {
   month: string; // e.g. "2026-07"
   baseSalary: number;
   allowances: number;
+  otherAllowances?: number;
   overtimeHours: number;
   overtimeRate: number;
   overtimePay: number;

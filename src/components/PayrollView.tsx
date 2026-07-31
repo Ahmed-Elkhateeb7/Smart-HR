@@ -14,6 +14,7 @@ import {
   Edit3,
   Save,
   Search,
+  Filter,
   SlidersHorizontal,
   TrendingUp,
   Percent,
@@ -27,6 +28,7 @@ import {
   ChevronRight,
   ChevronDown,
   FileSpreadsheet,
+  Clock,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { PayrollRecord, Employee, Department } from "../types";
@@ -55,6 +57,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
   const [isSpreadsheetMode, setIsSpreadsheetMode] = useState<boolean>(false);
+  const [activeTableTab, setActiveTableTab] = useState<'main' | 'overtime'>('main');
   const [editingRecord, setEditingRecord] = useState<PayrollRecord | null>(
     null,
   );
@@ -143,6 +146,8 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
       Number(merged.baseSalary) >= 0 ? Number(merged.baseSalary) : 0;
     const allowances =
       Number(merged.allowances) >= 0 ? Number(merged.allowances) : 0;
+    const otherAllowances =
+      Number(merged.otherAllowances) >= 0 ? Number(merged.otherAllowances) : 0;
     const bonus = Number(merged.bonus) >= 0 ? Number(merged.bonus) : 0;
 
     // Ensure day/night overtime values are initialized
@@ -176,7 +181,16 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
     const otPayDay = otHoursDay * hourlyRate * otRateDay;
     const otPayNight = otHoursNight * hourlyRate * otRateNight;
     const otPayFriday = otHoursFriday * hourlyRate * otRateFriday;
-    const overtimePay = Math.round(otPayDay + otPayNight + otPayFriday);
+    const hoursCalculatedOt = Math.round(otPayDay + otPayNight + otPayFriday);
+
+    let overtimePay = 0;
+    if (fields.overtimePay !== undefined) {
+      overtimePay = Number(fields.overtimePay) >= 0 ? Number(fields.overtimePay) : 0;
+    } else if (otHoursDay > 0 || otHoursNight > 0 || otHoursFriday > 0) {
+      overtimePay = hoursCalculatedOt;
+    } else if (merged.overtimePay !== undefined) {
+      overtimePay = Number(merged.overtimePay) >= 0 ? Number(merged.overtimePay) : 0;
+    }
 
     const deductions =
       Number(merged.deductions) >= 0 ? Number(merged.deductions) : 0;
@@ -192,7 +206,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
     const netSalary = Math.round(
       baseSalary +
         allowances +
-        overtimePay +
+        otherAllowances +
         bonus -
         (deductions + latePenaltyDeduction + loanInstallment + socialInsurance),
     );
@@ -201,6 +215,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
       ...merged,
       baseSalary,
       allowances,
+      otherAllowances,
       bonus,
       overtimeHoursDay: otHoursDay,
       overtimeHoursNight: otHoursNight,
@@ -266,6 +281,10 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
   );
   const totalAllowances = filteredRecords.reduce(
     (sum, p) => sum + p.allowances,
+    0,
+  );
+  const totalOtherAllowances = filteredRecords.reduce(
+    (sum, p) => sum + (p.otherAllowances || 0),
     0,
   );
   const totalOvertime = filteredRecords.reduce(
@@ -454,6 +473,96 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
     document.body.removeChild(link);
     triggerNotify(
       `تم استخراج وتنزيل التقرير التنفيذي بصيغة Excel لشهر ${monthLabel} بنجاح!`,
+    );
+  };
+
+  const exportOvertimeToExcel = () => {
+    const monthLabel = getSelectedMonthLabel();
+    const dateStr = new Date().toLocaleDateString("ar-EG");
+
+    const summaryLines = [
+      ["سجل تفاصيل ومستحقات العمل الإضافي (Overtime Report)"],
+      [`الفترة المالية:`, monthLabel],
+      [`تاريخ التصدير:`, dateStr],
+      [`حالة المسير:`, isApproved ? "معتمد ومقفل" : "مسودة وتحت المراجعة"],
+      [""],
+      ["--- ملخص الساعات والمبالغ ---"],
+      ["إجمالي عدد الموظفين في السجل", filteredRecords.length],
+      [
+        "إجمالي الساعات الإضافية النهارية",
+        filteredRecords.reduce((sum, r) => sum + (r.overtimeHoursDay || 0), 0),
+      ],
+      [
+        "إجمالي الساعات الإضافية الليلية",
+        filteredRecords.reduce((sum, r) => sum + (r.overtimeHoursNight || 0), 0),
+      ],
+      [
+        "إجمالي ساعات الجمع والعطلات",
+        filteredRecords.reduce((sum, r) => sum + (r.fridayOvertimeHours || 0), 0),
+      ],
+      ["إجمالي المبالغ المستحقة للإضافي", `${totalOvertime} ${currencySymbol}`],
+      [""],
+      ["--- تفاصيل العمل الإضافي حسب الموظف ---"],
+    ];
+
+    const headers = [
+      "كود الموظف",
+      "الاسم الكامل",
+      "الوظيفة",
+      "القسم",
+      "الراتب الأساسي",
+      "إضافي نهار (ساعة)",
+      "إضافي ليل (ساعة)",
+      "إضافي الجمعة/العطلات (ساعة)",
+      "إجمالي الساعات الإضافية",
+      "إجمالي مستحق الإضافي (ج.م)",
+    ];
+
+    const rows = filteredRecords.map((rec) => {
+      const dayH = rec.overtimeHoursDay || 0;
+      const nightH = rec.overtimeHoursNight || 0;
+      const friH = rec.fridayOvertimeHours || 0;
+      const totalHours = dayH + nightH + friH;
+
+      return [
+        rec.employeeCode,
+        rec.employeeName,
+        rec.position,
+        rec.department,
+        rec.baseSalary,
+        dayH,
+        nightH,
+        friH,
+        totalHours,
+        rec.overtimePay,
+      ];
+    });
+
+    const csvContent = [
+      ...summaryLines.map((line) =>
+        line.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(","),
+      ),
+      headers.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(","),
+      ...rows.map((row) =>
+        row.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(","),
+      ),
+    ].join("\n");
+
+    const blob = new Blob([new Uint8Array([0xef, 0xbb, 0xbf]), csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      `سجل_تفاصيل_الإضافي_${selectedMonth}.csv`,
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    triggerNotify(
+      `تم استخراج وتنزيل سجل تفاصيل الإضافي بصيغة Excel لشهر ${monthLabel} بنجاح!`,
     );
   };
 
@@ -749,10 +858,10 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
 
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs">
           <span className="text-[11px] text-slate-400 font-bold block">
-            إجمالي الإضافي
+            بدلات أخرى
           </span>
-          <p className="text-base font-extrabold text-blue-600 mt-1">
-            +{totalOvertime.toLocaleString()} {currencySymbol}
+          <p className="text-base font-extrabold text-teal-600 mt-1">
+            +{totalOtherAllowances.toLocaleString()} {currencySymbol}
           </p>
         </div>
 
@@ -785,98 +894,131 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
       </div>
 
       {/* Control Panel Toolbar */}
-      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 shadow-xs flex flex-col lg:flex-row items-center justify-between gap-4">
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
-          {/* Search */}
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 shadow-xs flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4">
+        {/* Search & Department Filters */}
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto shrink-0">
+          {/* Search Input */}
+          <div className="relative w-full sm:w-60 lg:w-64">
+            <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="ابحث عن موظف أو مسمى..."
-              className="w-full pr-10 pl-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs font-medium focus:outline-none focus:border-blue-600 dark:text-white"
+              className="w-full pr-10 pl-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-600 focus:bg-white dark:focus:bg-slate-950 transition-all"
             />
           </div>
 
-          {/* Department Filter */}
-          <div className="w-full sm:w-48">
+          {/* Department Filter Selector */}
+          <div className="relative w-full sm:w-48">
+            <Filter className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <select
               value={selectedDepartment}
               onChange={(e) => setSelectedDepartment(e.target.value)}
-              className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs font-bold text-slate-700 dark:text-slate-300 focus:outline-none"
+              className="w-full pr-10 pl-8 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-blue-600 appearance-none cursor-pointer transition-all"
             >
-              <option value="all">كل الأقسام</option>
+              <option value="all">جميع الأقسام (الكل)</option>
               {departments.map((dept) => (
                 <option key={dept} value={dept}>
                   {dept}
                 </option>
               ))}
             </select>
+            <ChevronDown className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 w-full lg:w-auto">
-          {/* Smart AI helper */}
-          <button
-            onClick={() => setShowAiAnalysis(true)}
-            className="px-3 py-2 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 font-bold text-xs flex items-center gap-1.5 hover:bg-amber-100/60 transition-all shrink-0"
-          >
-            <Sparkles className="w-4 h-4 text-amber-500" />
-            <span>تحليل كلفة الأجور بالذكاء الاصطناعي</span>
-          </button>
-
-          {/* Export to Excel */}
+        {/* Action Controls & Utilities */}
+        <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2.5 w-full xl:w-auto">
+          {/* Export Payroll to Excel */}
           <button
             type="button"
             onClick={exportPayrollToExcel}
-            className="px-3 py-2 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 font-bold text-xs flex items-center gap-1.5 hover:bg-emerald-100/60 transition-all cursor-pointer"
+            className="px-3.5 py-2.5 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-extrabold text-xs flex items-center gap-1.5 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-all cursor-pointer whitespace-nowrap shrink-0 active:scale-[0.98]"
             title="تنزيل مسير الرواتب بصيغة Excel"
           >
-            <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span>تنزيل Excel</span>
+          </button>
+
+          {/* Export Overtime to Excel */}
+          <button
+            type="button"
+            onClick={exportOvertimeToExcel}
+            className="px-3.5 py-2.5 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/80 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-extrabold text-xs flex items-center gap-1.5 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-all cursor-pointer whitespace-nowrap shrink-0 active:scale-[0.98]"
+            title="تنزيل سجل تفاصيل الإضافي بصيغة Excel"
+          >
+            <Download className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <span>سجل الإضافي Excel</span>
           </button>
 
           {/* Print Table */}
           <button
             type="button"
             onClick={printPayrollTable}
-            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all cursor-pointer"
+            className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-extrabold text-xs flex items-center gap-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all cursor-pointer whitespace-nowrap shrink-0 active:scale-[0.98]"
             title="طباعة مسير الرواتب"
           >
-            <Printer className="w-4 h-4 text-slate-500" />
+            <Printer className="w-4 h-4 text-slate-500 shrink-0" />
             <span>طباعة الجدول</span>
           </button>
 
-          {/* Spreadsheet edit toggle */}
+          {/* Spreadsheet Edit Toggle */}
           <button
+            type="button"
             disabled={isApproved}
             onClick={() => {
               setIsSpreadsheetMode(!isSpreadsheetMode);
               triggerNotify(
                 !isSpreadsheetMode
-                  ? "تم تفعيل وضع التعديل السريع! يمكنك التعديل مباشرة من داخل الجدول."
+                  ? "تم تفعيل وضع التعديل السريع لجدول المرتبات وجدول الإضافي! يمكنك التعديل مباشرة من داخل الجداول."
                   : "تم حفظ وإغلاق وضع التعديل السريع.",
               );
             }}
-            className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shrink-0 cursor-pointer ${
+            className={`px-4 py-2.5 rounded-xl font-extrabold text-xs flex items-center gap-2 transition-all shrink-0 cursor-pointer whitespace-nowrap active:scale-[0.98] ${
               isApproved
                 ? "bg-slate-100 text-slate-400 dark:bg-slate-900 cursor-not-allowed border border-slate-200 dark:border-slate-800"
                 : isSpreadsheetMode
-                  ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/10"
-                  : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200"
+                  ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/20"
+                  : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700"
             }`}
           >
-            <Edit3 className="w-4 h-4" />
+            <Edit3 className="w-4 h-4 shrink-0" />
             <span>
               {isSpreadsheetMode
                 ? "إنهاء التعديل السريع"
-                : "وضع التعديل السريع للمرتبات"}
+                : "التعديل السريع (المرتبات والإضافي)"}
             </span>
           </button>
         </div>
       </div>
 
+      {/* Table Toggle Tabs */}
+      <div className="flex items-center gap-6 mb-4 border-b border-slate-200 dark:border-slate-700">
+        <button
+          onClick={() => setActiveTableTab('main')}
+          className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors ${
+            activeTableTab === 'main'
+              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 dark:border-indigo-400'
+              : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
+          }`}
+        >
+          جدول المرتبات الأساسي
+        </button>
+        <button
+          onClick={() => setActiveTableTab('overtime')}
+          className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors ${
+            activeTableTab === 'overtime'
+              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 dark:border-indigo-400'
+              : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
+          }`}
+        >
+          سجل تفاصيل الإضافي
+        </button>
+      </div>
+
+      {activeTableTab === 'main' && (
+        <>
       {/* Core Interactive Worksheet Table */}
       <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xs">
         <table className="w-full text-right text-xs">
@@ -884,11 +1026,8 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
             <tr>
               <th className="p-3.5 min-w-[150px]">الموظف والوظيفة</th>
               <th className="p-3.5 text-center">الراتب الأساسي</th>
-              <th className="p-3.5 text-center">البدلات المعتمدة</th>
-              <th className="p-3.5 text-center">إضافي نهار (ساعة)</th>
-              <th className="p-3.5 text-center">إضافي ليل (ساعة)</th>
-              <th className="p-3.5 text-center">إضافي الجمعة (ساعة)</th>
-              <th className="p-3.5 text-center">الحوافز والمكافآت</th>
+              <th className="p-3.5 text-center">الحوافز والبدلات ({currencySymbol})</th>
+              <th className="p-3.5 text-center">بدلات أخرى ({currencySymbol})</th>
               <th className="p-3.5 text-center">الخصم / التأخير</th>
               <th className="p-3.5 text-center">التأمينات / سلف</th>
               <th className="p-3.5 text-center font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50/20 dark:bg-indigo-950/10 min-w-[110px]">
@@ -976,7 +1115,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                         <div className="flex items-center justify-center gap-1">
                           <input
                             type="number"
-                            value={rec.baseSalary}
+                            value={rec.baseSalary || ""}
                             onChange={(e) =>
                               handleFieldChange(
                                 rec,
@@ -995,17 +1134,17 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                       )}
                     </td>
 
-                    {/* Allowances */}
+                    {/* Allowances (الحوافز والبدلات) */}
                     <td className="p-2 text-center">
                       {isSpreadsheetMode && !isApproved ? (
                         <input
                           type="number"
-                          value={rec.allowances}
+                          value={rec.allowances || ""}
                           onChange={(e) =>
                             handleFieldChange(rec, "allowances", e.target.value)
                           }
                           onFocus={(e) => e.target.select()}
-                          className="w-18 p-1.5 text-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none dark:text-white"
+                          className="w-20 p-1.5 text-center rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50/30 dark:bg-emerald-950/20 font-bold text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none text-emerald-600 dark:text-emerald-300"
                         />
                       ) : (
                         <span className="font-bold text-emerald-600">
@@ -1014,109 +1153,22 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                       )}
                     </td>
 
-                    {/* Day Overtime Hours */}
-                    <td className="p-2 text-center">
-                      {isSpreadsheetMode && !isApproved ? (
-                        <div className="flex items-center justify-center gap-1">
-                          <input
-                            type="number"
-                            value={dayHours}
-                            onChange={(e) =>
-                              handleFieldChange(
-                                rec,
-                                "overtimeHoursDay",
-                                e.target.value,
-                              )
-                            }
-                            onFocus={(e) => e.target.select()}
-                            placeholder="0"
-                            className="w-14 p-1.5 text-center rounded-lg border border-blue-200 dark:border-blue-900/60 bg-blue-50/30 dark:bg-blue-950/20 font-bold text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none text-blue-600 dark:text-blue-300"
-                          />
-                        </div>
-                      ) : (
-                        <span className="font-bold text-blue-600 dark:text-blue-400">
-                          {dayHours}س{" "}
-                          <span className="text-[9px] text-slate-400 font-normal">
-                            (×1.5)
-                          </span>
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Night Overtime Hours */}
-                    <td className="p-2 text-center">
-                      {isSpreadsheetMode && !isApproved ? (
-                        <div className="flex items-center justify-center gap-1">
-                          <input
-                            type="number"
-                            value={nightHours}
-                            onChange={(e) =>
-                              handleFieldChange(
-                                rec,
-                                "overtimeHoursNight",
-                                e.target.value,
-                              )
-                            }
-                            onFocus={(e) => e.target.select()}
-                            placeholder="0"
-                            className="w-14 p-1.5 text-center rounded-lg border border-purple-200 dark:border-purple-900/60 bg-purple-50/30 dark:bg-purple-950/20 font-bold text-xs focus:ring-1 focus:ring-purple-500 focus:outline-none text-purple-600 dark:text-purple-300"
-                          />
-                        </div>
-                      ) : (
-                        <span className="font-bold text-purple-600 dark:text-purple-400">
-                          {nightHours}س{" "}
-                          <span className="text-[9px] text-slate-400 font-normal">
-                            (×2.0)
-                          </span>
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Friday Overtime Hours */}
-                    <td className="p-2 text-center">
-                      {isSpreadsheetMode && !isApproved ? (
-                        <div className="flex items-center justify-center gap-1">
-                          <input
-                            type="number"
-                            value={fridayHours}
-                            onChange={(e) =>
-                              handleFieldChange(
-                                rec,
-                                "fridayOvertimeHours",
-                                e.target.value,
-                              )
-                            }
-                            onFocus={(e) => e.target.select()}
-                            placeholder="0"
-                            className="w-14 p-1.5 text-center rounded-lg border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/30 dark:bg-emerald-950/20 font-bold text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none text-emerald-600 dark:text-emerald-300"
-                          />
-                        </div>
-                      ) : (
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                          {fridayHours}س{" "}
-                          <span className="text-[9px] text-slate-400 font-normal">
-                            (×2.0)
-                          </span>
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Incentives / Bonus */}
+                    {/* Other Allowances (بدلات أخرى) */}
                     <td className="p-2 text-center">
                       {isSpreadsheetMode && !isApproved ? (
                         <input
                           type="number"
-                          value={bonusVal}
+                          value={rec.otherAllowances || ""}
                           onChange={(e) =>
-                            handleFieldChange(rec, "bonus", e.target.value)
+                            handleFieldChange(rec, "otherAllowances", e.target.value)
                           }
                           onFocus={(e) => e.target.select()}
                           placeholder="0"
-                          className="w-16 p-1.5 text-center rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50/30 dark:bg-amber-950/20 font-bold text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none text-amber-600 dark:text-amber-300"
+                          className="w-20 p-1.5 text-center rounded-lg border border-teal-200 dark:border-teal-900 bg-teal-50/30 dark:bg-teal-950/20 font-bold text-xs focus:ring-1 focus:ring-teal-500 focus:outline-none text-teal-600 dark:text-teal-300"
                         />
                       ) : (
-                        <span className="font-bold text-amber-600 dark:text-amber-400">
-                          {bonusVal > 0 ? `+${bonusVal.toLocaleString()}` : "0"}
+                        <span className="font-bold text-teal-600 dark:text-teal-400">
+                          +{(rec.otherAllowances || 0).toLocaleString()}
                         </span>
                       )}
                     </td>
@@ -1127,7 +1179,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                         <div className="flex items-center justify-center gap-1">
                           <input
                             type="number"
-                            value={rec.deductions + rec.latePenaltyDeduction}
+                            value={(rec.deductions + rec.latePenaltyDeduction) || ""}
                             onChange={(e) =>
                               handleFieldChange(
                                 rec,
@@ -1186,16 +1238,6 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                           <SlidersHorizontal className="w-3.5 h-3.5" />
                           <span>تعديل تفصيلي</span>
                         </button>
-
-                        {/* Print payslip */}
-                        <button
-                          id={`open-payslip-${rec.id}`}
-                          onClick={() => setActivePayslipRecord(rec)}
-                          className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold transition-colors flex items-center justify-center gap-1"
-                        >
-                          <Printer className="w-3.5 h-3.5 text-indigo-600" />
-                          <span>قسيمة الراتب</span>
-                        </button>
                       </div>
                     </td>
                   </tr>
@@ -1205,6 +1247,188 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
           </tbody>
         </table>
       </div>
+
+      </>
+      )}
+
+      {activeTableTab === 'overtime' && (
+        <>
+      {/* Overtime Breakdown Table */}
+      <div className="mt-4 mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <h3 className="text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+          <Clock className="w-5 h-5 text-blue-600" />
+          <span>سجل ساعات الإضافي (الليل، النهار، الجمعة)</span>
+        </h3>
+
+        <button
+          type="button"
+          onClick={exportOvertimeToExcel}
+          className="px-3.5 py-2 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 font-bold text-xs flex items-center gap-1.5 hover:bg-emerald-100 transition-all cursor-pointer shadow-xs"
+          title="تنزيل سجل تفاصيل الإضافي Excel"
+        >
+          <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+          <span>تنزيل سجل الإضافي بصيغة Excel</span>
+        </button>
+      </div>
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xs mb-8">
+        <table className="w-full text-right text-xs">
+          <thead className="bg-slate-50 dark:bg-slate-900/80 text-slate-600 dark:text-slate-400 font-black border-b border-slate-200 dark:border-slate-700">
+            <tr>
+              <th className="p-3.5 min-w-[150px]">الموظف والوظيفة</th>
+              <th className="p-3.5 text-center">الراتب الأساسي</th>
+              <th className="p-3.5 text-center">إضافي نهار (ساعة)</th>
+              <th className="p-3.5 text-center">إضافي ليل (ساعة)</th>
+              <th className="p-3.5 text-center">إضافي الجمعة (ساعة)</th>
+              <th className="p-3.5 text-center font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50/20 dark:bg-indigo-950/10">
+                إجمالي قيمة الإضافي
+              </th>
+              <th className="p-3.5 text-center min-w-[140px]">
+                التحكم
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
+            {filteredRecords.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="p-10 text-center text-slate-500 font-bold">
+                  لا توجد سجلات.
+                </td>
+              </tr>
+            ) : (
+              filteredRecords.map((rec) => {
+                const dayHours = rec.overtimeHoursDay !== undefined ? rec.overtimeHoursDay : 0;
+                const nightHours = rec.overtimeHoursNight !== undefined ? rec.overtimeHoursNight : 0;
+                const fridayHours = rec.fridayOvertimeHours !== undefined ? rec.fridayOvertimeHours : 0;
+
+                const emp = employees.find((e) => e.id === rec.employeeId);
+                const empName = emp ? emp.name : "غير معروف";
+                const jobTitle = emp ? emp.position : "غير محدد";
+                
+                return (
+                  <tr key={`ot-${rec.id}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="p-3.5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center font-bold text-indigo-700 dark:text-indigo-300">
+                          {empName.charAt(0)}
+                        </div>
+                        <div>
+                          <p className="font-extrabold text-slate-900 dark:text-white">
+                            {empName}
+                          </p>
+                          <p className="text-[10px] text-slate-500 font-bold">
+                            {jobTitle}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-2 text-center font-bold text-slate-800 dark:text-slate-200">
+                      {isSpreadsheetMode && !isApproved ? (
+                        <div className="flex items-center justify-center gap-1">
+                          <input
+                            type="number"
+                            value={rec.baseSalary || ""}
+                            onChange={(e) =>
+                              handleFieldChange(
+                                rec,
+                                "baseSalary",
+                                e.target.value,
+                              )
+                            }
+                            onFocus={(e) => e.target.select()}
+                            className="w-20 p-1.5 text-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none dark:text-white"
+                          />
+                        </div>
+                      ) : (
+                        rec.baseSalary.toLocaleString()
+                      )}
+                    </td>
+                    <td className="p-2 text-center">
+                      {isSpreadsheetMode && !isApproved ? (
+                        <div className="flex items-center justify-center gap-1">
+                          <input
+                            type="number"
+                            value={dayHours || ""}
+                            onChange={(e) =>
+                              handleFieldChange(rec, "overtimeHoursDay", e.target.value)
+                            }
+                            onFocus={(e) => e.target.select()}
+                            placeholder="0"
+                            className="w-14 p-1.5 text-center rounded-lg border border-blue-200 dark:border-blue-900/60 bg-blue-50/30 dark:bg-blue-950/20 font-bold text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none text-blue-600 dark:text-blue-300"
+                          />
+                        </div>
+                      ) : (
+                        <span className="font-bold text-blue-600 dark:text-blue-400">
+                          {dayHours}س <span className="text-[9px] text-slate-400 font-normal">(×{rec.overtimeRateDay || 1.5})</span>
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-2 text-center">
+                      {isSpreadsheetMode && !isApproved ? (
+                        <div className="flex items-center justify-center gap-1">
+                          <input
+                            type="number"
+                            value={nightHours || ""}
+                            onChange={(e) =>
+                              handleFieldChange(rec, "overtimeHoursNight", e.target.value)
+                            }
+                            onFocus={(e) => e.target.select()}
+                            placeholder="0"
+                            className="w-14 p-1.5 text-center rounded-lg border border-purple-200 dark:border-purple-900/60 bg-purple-50/30 dark:bg-purple-950/20 font-bold text-xs focus:ring-1 focus:ring-purple-500 focus:outline-none text-purple-600 dark:text-purple-300"
+                          />
+                        </div>
+                      ) : (
+                        <span className="font-bold text-purple-600 dark:text-purple-400">
+                          {nightHours}س <span className="text-[9px] text-slate-400 font-normal">(×{rec.overtimeRateNight || 2.0})</span>
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-2 text-center">
+                      {isSpreadsheetMode && !isApproved ? (
+                        <div className="flex items-center justify-center gap-1">
+                          <input
+                            type="number"
+                            value={fridayHours || ""}
+                            onChange={(e) =>
+                              handleFieldChange(rec, "fridayOvertimeHours", e.target.value)
+                            }
+                            onFocus={(e) => e.target.select()}
+                            placeholder="0"
+                            className="w-14 p-1.5 text-center rounded-lg border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/30 dark:bg-emerald-950/20 font-bold text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none text-emerald-600 dark:text-emerald-300"
+                          />
+                        </div>
+                      ) : (
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                          {fridayHours}س <span className="text-[9px] text-slate-400 font-normal">(×{rec.fridayOvertimeRate || 2.0})</span>
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-2 text-center font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50/20 dark:bg-indigo-950/10">
+                      +{rec.overtimePay.toLocaleString()} {currencySymbol}
+                    </td>
+                    <td className="p-3.5 text-center">
+                      <button
+                        disabled={isApproved}
+                        onClick={() => setEditingRecord(rec)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 mx-auto ${
+                          isApproved
+                            ? "bg-slate-100 text-slate-400 dark:bg-slate-900 cursor-not-allowed"
+                            : "bg-blue-50 hover:bg-blue-100 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
+                        }`}
+                      >
+                        <SlidersHorizontal className="w-3.5 h-3.5" />
+                        <span>تعديل</span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      </>
+      )}
 
       {/* Detailed Modal for Financial Adjustments */}
       {editingRecord && (
@@ -1239,7 +1463,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
             {/* Content Form Body */}
             <div className="space-y-4 text-xs">
               {/* Row 1: Base Salary & Allowances */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-900/30 p-3.5 rounded-2xl">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 dark:bg-slate-900/30 p-3.5 rounded-2xl">
                 <div>
                   <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
                     الراتب الأساسي الحالي ({currencySymbol}) *
@@ -1247,7 +1471,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                   <input
                     required
                     type="number"
-                    value={editingRecord.baseSalary}
+                    value={editingRecord.baseSalary || ""}
                     onChange={(e) =>
                       setEditingRecord(
                         calculateRecord(editingRecord, {
@@ -1261,12 +1485,12 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
 
                 <div>
                   <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                    البدلات المعتمدة ({currencySymbol}) *
+                    الحوافز والبدلات ({currencySymbol}) *
                   </label>
                   <input
                     required
                     type="number"
-                    value={editingRecord.allowances}
+                    value={editingRecord.allowances || ""}
                     onChange={(e) =>
                       setEditingRecord(
                         calculateRecord(editingRecord, {
@@ -1277,16 +1501,58 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                     className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-xs"
                   />
                 </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    بدلات أخرى ({currencySymbol})
+                  </label>
+                  <input
+                    type="number"
+                    value={editingRecord.otherAllowances || ""}
+                    onChange={(e) =>
+                      setEditingRecord(
+                        calculateRecord(editingRecord, {
+                          otherAllowances: Number(e.target.value),
+                        }),
+                      )
+                    }
+                    placeholder="0"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-xs"
+                  />
+                </div>
               </div>
 
-              {/* Row 2: Overtime Day & Night with customizable multipliers! */}
+              {/* Row 2: Overtime Direct Cash Entry & Optional Hours Breakdown */}
               <div className="border border-slate-200 dark:border-slate-700 p-4 rounded-2xl space-y-3 bg-white dark:bg-slate-800">
                 <h4 className="font-extrabold text-[11px] text-blue-600 flex items-center gap-1 border-b border-slate-100 dark:border-slate-700 pb-1.5">
                   <ArrowUpRight className="w-4 h-4 text-emerald-500" />
-                  <span>ساعات العمل الإضافية الخاصة (Overtime Breakdown)</span>
+                  <span>مبلغ وتفاصيل العمل الإضافي (Overtime)</span>
                 </h4>
 
-                <div className="grid grid-cols-2 gap-3">
+                {/* Direct Overtime Amount (Free Entry) */}
+                <div className="bg-blue-50/70 dark:bg-blue-950/40 p-3 rounded-xl border border-blue-200 dark:border-blue-900">
+                  <label className="font-extrabold text-blue-900 dark:text-blue-200 block mb-1">
+                    مبلغ الإضافي (ج.م) - إدخال حر مباشر بدون الحاجة لحساب الساعات
+                  </label>
+                  <input
+                    type="number"
+                    value={editingRecord.overtimePay || ""}
+                    onChange={(e) =>
+                      setEditingRecord(
+                        calculateRecord(editingRecord, {
+                          overtimePay: Number(e.target.value),
+                        }),
+                      )
+                    }
+                    placeholder="أدخل قيمة الإضافي بالجنيه بحرية..."
+                    className="w-full p-2.5 rounded-xl border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-900 font-black text-blue-600 dark:text-blue-400 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Optional Hours Breakdown */}
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60">
+                  <p className="font-bold text-slate-500 dark:text-slate-400 text-[10px] mb-2">أو يمكنك استخدام حاسبة الساعات التلقائية (اختياري):</p>
+                  <div className="grid grid-cols-2 gap-3">
                   {/* Day OT Hours */}
                   <div>
                     <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
@@ -1294,11 +1560,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                     </label>
                     <input
                       type="number"
-                      value={
-                        editingRecord.overtimeHoursDay !== undefined
-                          ? editingRecord.overtimeHoursDay
-                          : 0
-                      }
+                      value={editingRecord.overtimeHoursDay || ""}
                       onChange={(e) =>
                         setEditingRecord(
                           calculateRecord(editingRecord, {
@@ -1345,11 +1607,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                     </label>
                     <input
                       type="number"
-                      value={
-                        editingRecord.overtimeHoursNight !== undefined
-                          ? editingRecord.overtimeHoursNight
-                          : 0
-                      }
+                      value={editingRecord.overtimeHoursNight || ""}
                       onChange={(e) =>
                         setEditingRecord(
                           calculateRecord(editingRecord, {
@@ -1396,11 +1654,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                     </label>
                     <input
                       type="number"
-                      value={
-                        editingRecord.fridayOvertimeHours !== undefined
-                          ? editingRecord.fridayOvertimeHours
-                          : 0
-                      }
+                      value={editingRecord.fridayOvertimeHours || ""}
                       onChange={(e) =>
                         setEditingRecord(
                           calculateRecord(editingRecord, {
@@ -1450,6 +1704,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                     {editingRecord.overtimePay} {currencySymbol}
                   </strong>
                 </div>
+                </div>
               </div>
 
               {/* Row 3: Bonuses & Deductions */}
@@ -1460,11 +1715,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                   </label>
                   <input
                     type="number"
-                    value={
-                      editingRecord.bonus !== undefined
-                        ? editingRecord.bonus
-                        : 0
-                    }
+                    value={editingRecord.bonus || ""}
                     onChange={(e) =>
                       setEditingRecord(
                         calculateRecord(editingRecord, {
@@ -1483,7 +1734,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                   </label>
                   <input
                     type="number"
-                    value={editingRecord.deductions}
+                    value={editingRecord.deductions || ""}
                     onChange={(e) =>
                       setEditingRecord(
                         calculateRecord(editingRecord, {
@@ -1502,7 +1753,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                   </label>
                   <input
                     type="number"
-                    value={editingRecord.latePenaltyDeduction}
+                    value={editingRecord.latePenaltyDeduction || ""}
                     onChange={(e) =>
                       setEditingRecord(
                         calculateRecord(editingRecord, {
@@ -1521,7 +1772,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                   </label>
                   <input
                     type="number"
-                    value={editingRecord.loanInstallment}
+                    value={editingRecord.loanInstallment || ""}
                     onChange={(e) =>
                       setEditingRecord(
                         calculateRecord(editingRecord, {
@@ -1540,7 +1791,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                   </label>
                   <input
                     type="number"
-                    value={editingRecord.socialInsurance}
+                    value={editingRecord.socialInsurance || ""}
                     onChange={(e) =>
                       setEditingRecord(
                         calculateRecord(editingRecord, {
@@ -1570,7 +1821,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                     {(
                       editingRecord.baseSalary +
                       editingRecord.allowances +
-                      editingRecord.overtimePay +
+                      (editingRecord.otherAllowances || 0) +
                       (editingRecord.bonus || 0)
                     ).toLocaleString()}
                   </div>

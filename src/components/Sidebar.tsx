@@ -252,12 +252,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <p
                 className="text-xs font-bold truncate text-slate-800 dark:text-slate-200"
               >
-                شركة مصر للحلول الذكية
+                النظام الموحد
               </p>
               <p
                 className="text-[10px] truncate text-slate-500 dark:text-slate-400"
               >
-                القاهرة - جمهورية مصر العربية
+                إدارة الموارد البشرية
               </p>
             </div>
           </div>

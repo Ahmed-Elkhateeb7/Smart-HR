@@ -56,6 +56,26 @@ export const initialShifts: Shift[] = [
     workingHours: 8,
     activeDays: ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'],
   },
+  {
+    id: 'sh-4',
+    name: 'وردية جمعة صباحية',
+    type: 'morning',
+    startTime: '08:00',
+    endTime: '16:00',
+    gracePeriodMinutes: 15,
+    workingHours: 8,
+    activeDays: ['الجمعة'],
+  },
+  {
+    id: 'sh-5',
+    name: 'وردية جمعة مسائية',
+    type: 'evening',
+    startTime: '16:00',
+    endTime: '00:00',
+    gracePeriodMinutes: 15,
+    workingHours: 8,
+    activeDays: ['الجمعة'],
+  },
 ];
 
 export const initialAttendanceRecords: AttendanceRecord[] = [];

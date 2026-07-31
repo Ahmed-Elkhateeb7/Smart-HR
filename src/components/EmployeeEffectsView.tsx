@@ -50,8 +50,8 @@ export const EmployeeEffectsView: React.FC<EmployeeEffectsViewProps> = ({
   }>>({});
   
   const [editForm, setEditForm] = useState({
-    annualLeaveTotal: 21,
-    casualLeaveTotal: 7,
+    annualLeaveTotal: 0,
+    casualLeaveTotal: 0,
     absences: 0,
     lates: 0,
     totalIncentives: 0,
@@ -132,8 +132,8 @@ export const EmployeeEffectsView: React.FC<EmployeeEffectsViewProps> = ({
     
     // Mock leave balances (Typically 21 annual, 7 casual in standard contracts)
     // Could be dynamically calculated based on join date in a real app
-    const annualLeaveTotal = override.annualLeaveTotal ?? 21;
-    const casualLeaveTotal = override.casualLeaveTotal ?? 7;
+    const annualLeaveTotal = override.annualLeaveTotal ?? 0;
+    const casualLeaveTotal = override.casualLeaveTotal ?? 0;
     
     const consumedLeaves = attendance.filter(a => a.employeeId === employee.id && a.status === 'leave').length;
     // Simple distribution for visual sake (Assuming 80% annual, 20% casual consumed if any)
@@ -415,8 +415,9 @@ export const EmployeeEffectsView: React.FC<EmployeeEffectsViewProps> = ({
                   <input
                     type="number"
                     min="0"
-                    value={editForm.annualLeaveTotal}
-                    onChange={(e) => setEditForm({...editForm, annualLeaveTotal: parseInt(e.target.value) || 0})}
+                    value={editForm.annualLeaveTotal || ''}
+                    onChange={(e) => setEditForm({...editForm, annualLeaveTotal: e.target.value === '' ? 0 : parseInt(e.target.value) || 0})}
+                    placeholder="0"
                     className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
                   />
                 </div>
@@ -425,8 +426,9 @@ export const EmployeeEffectsView: React.FC<EmployeeEffectsViewProps> = ({
                   <input
                     type="number"
                     min="0"
-                    value={editForm.casualLeaveTotal}
-                    onChange={(e) => setEditForm({...editForm, casualLeaveTotal: parseInt(e.target.value) || 0})}
+                    value={editForm.casualLeaveTotal || ''}
+                    onChange={(e) => setEditForm({...editForm, casualLeaveTotal: e.target.value === '' ? 0 : parseInt(e.target.value) || 0})}
+                    placeholder="0"
                     className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
                   />
                 </div>
@@ -436,8 +438,9 @@ export const EmployeeEffectsView: React.FC<EmployeeEffectsViewProps> = ({
                   <input
                     type="number"
                     min="0"
-                    value={editForm.absences}
-                    onChange={(e) => setEditForm({...editForm, absences: parseInt(e.target.value) || 0})}
+                    value={editForm.absences || ''}
+                    onChange={(e) => setEditForm({...editForm, absences: e.target.value === '' ? 0 : parseInt(e.target.value) || 0})}
+                    placeholder="0"
                     className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
                   />
                 </div>
@@ -446,8 +449,9 @@ export const EmployeeEffectsView: React.FC<EmployeeEffectsViewProps> = ({
                   <input
                     type="number"
                     min="0"
-                    value={editForm.lates}
-                    onChange={(e) => setEditForm({...editForm, lates: parseInt(e.target.value) || 0})}
+                    value={editForm.lates || ''}
+                    onChange={(e) => setEditForm({...editForm, lates: e.target.value === '' ? 0 : parseInt(e.target.value) || 0})}
+                    placeholder="0"
                     className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
                   />
                 </div>
@@ -457,8 +461,9 @@ export const EmployeeEffectsView: React.FC<EmployeeEffectsViewProps> = ({
                   <input
                     type="number"
                     min="0"
-                    value={editForm.totalIncentives}
-                    onChange={(e) => setEditForm({...editForm, totalIncentives: parseInt(e.target.value) || 0})}
+                    value={editForm.totalIncentives || ''}
+                    onChange={(e) => setEditForm({...editForm, totalIncentives: e.target.value === '' ? 0 : parseInt(e.target.value) || 0})}
+                    placeholder="0"
                     className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
                   />
                 </div>
@@ -467,8 +472,9 @@ export const EmployeeEffectsView: React.FC<EmployeeEffectsViewProps> = ({
                   <input
                     type="number"
                     min="0"
-                    value={editForm.totalOvertime}
-                    onChange={(e) => setEditForm({...editForm, totalOvertime: parseInt(e.target.value) || 0})}
+                    value={editForm.totalOvertime || ''}
+                    onChange={(e) => setEditForm({...editForm, totalOvertime: e.target.value === '' ? 0 : parseInt(e.target.value) || 0})}
+                    placeholder="0"
                     className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
                   />
                 </div>

@@ -710,9 +710,9 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 قام الذكاء الاصطناعي بتحليل أنماط الحضور لهذا الشهر، وجاءت التوصيات كالتالي:
               </div>
               <ul className="space-y-2 list-disc list-inside text-slate-700 dark:text-slate-300">
-                <li>نسبة الانضباط بالوقت للوردية الصباحية بلغت <strong>94%</strong>.</li>
-                <li>يوجد تأخير متكرر في أيام الأحد بمعدل متوسط 12 دقيقة.</li>
-                <li>اقتراح: تحسين فترة السماح لوردية الدعم لتصبح 20 دقيقة بدلاً من 15.</li>
+                <li>نسبة الانضباط بالوقت للورديات بلغت <strong>{attendance.length > 0 ? Math.round((attendance.filter(a => a.status === 'present').length / attendance.length) * 100) : 100}%</strong>.</li>
+                <li>إجمالي دقائق التأخير المسجلة في النظام: {attendance.reduce((sum, a) => sum + (a.delayMinutes || 0), 0)} دقيقة.</li>
+                <li>اقتراح: مراجعة سياسات الحضور وفترات السماح بناءً على الأنماط الفعلية.</li>
               </ul>
             </div>
 

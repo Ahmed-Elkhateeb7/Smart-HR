@@ -24,11 +24,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   currencySymbol,
   setCurrencySymbol,
 }) => {
-  const [companyName, setCompanyName] = useState('شركة مصر للحلول المتقدمة الذكية (Smart HR Egypt)');
-  const [taxNumber, setTaxNumber] = useState('492-811-309');
-  const [crNumber, setCrNumber] = useState('102948');
-  const [gracePeriod, setGracePeriod] = useState(15);
-  const [gosiRate, setGosiRate] = useState(11);
+  const [companyName, setCompanyName] = useState('');
+  const [taxNumber, setTaxNumber] = useState('');
+  const [crNumber, setCrNumber] = useState('');
+  const [gracePeriod, setGracePeriod] = useState<string | number>('');
+  const [gosiRate, setGosiRate] = useState<string | number>('');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   const handleSave = (e: React.FormEvent) => {
@@ -96,6 +96,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 type="text"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="أدخل اسم المنشأة أو الشركة..."
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
               />
             </div>
@@ -106,6 +107,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 type="text"
                 value={taxNumber}
                 onChange={(e) => setTaxNumber(e.target.value)}
+                placeholder="أدخل الرقم الضريبي..."
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
               />
             </div>
@@ -116,6 +118,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 type="text"
                 value={crNumber}
                 onChange={(e) => setCrNumber(e.target.value)}
+                placeholder="أدخل رقم السجل التجاري..."
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
               />
             </div>
@@ -149,7 +152,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <input
                 type="number"
                 value={gracePeriod}
-                onChange={(e) => setGracePeriod(Number(e.target.value))}
+                onChange={(e) => setGracePeriod(e.target.value === '' ? '' : Number(e.target.value))}
+                placeholder="أدخل فترة السماح بالدقائق..."
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-amber-600"
               />
             </div>
@@ -160,7 +164,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 type="number"
                 step="0.01"
                 value={gosiRate}
-                onChange={(e) => setGosiRate(Number(e.target.value))}
+                onChange={(e) => setGosiRate(e.target.value === '' ? '' : Number(e.target.value))}
+                placeholder="أدخل نسبة خصم التأمينات..."
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-red-500"
               />
             </div>

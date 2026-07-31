@@ -152,7 +152,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-600">البدلات المعتمدة:</span>
+                  <span className="text-slate-600">الحوافز والبدلات:</span>
                   <span className="font-bold text-emerald-600">
                     +{payrollRecord.allowances.toLocaleString()}{" "}
                     {currencySymbol}

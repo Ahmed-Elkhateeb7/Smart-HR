@@ -25,10 +25,10 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
   const [activeTab, setActiveTab] = useState<'jd_generator' | 'chat'>('jd_generator');
 
   // JD Generator Form State
-  const [jobTitle, setJobTitle] = useState('مطور برمجيات ذكاء اصطناعي');
-  const [department, setDepartment] = useState('تكنولوجيا المعلومات');
-  const [seniorityLevel, setSeniorityLevel] = useState('مستوى متوسط - Senior');
-  const [keySkills, setKeySkills] = useState('TypeScript, React, Python, Gemini API, Cloud Deployment');
+  const [jobTitle, setJobTitle] = useState('');
+  const [department, setDepartment] = useState('');
+  const [seniorityLevel, setSeniorityLevel] = useState('');
+  const [keySkills, setKeySkills] = useState('');
   const [isGeneratingJd, setIsGeneratingJd] = useState(false);
   const [jdResult, setJdResult] = useState<any>(null);
   const [copiedJd, setCopiedJd] = useState(false);

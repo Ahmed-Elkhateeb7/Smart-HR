@@ -147,30 +147,18 @@ app.post('/api/ai/audit-payroll', async (req, res) => {
     const ai = getGemini();
 
     if (!ai) {
+      const empCount = employees ? employees.length : 0;
+      const loanCount = loans ? loans.length : 0;
       return res.json({
         success: true,
-        auditSummary: "فحص حارس المرتبات الذكي اكتمل بنجاح.",
-        alerts: [
+        auditSummary: empCount === 0 ? "لا يوجد بيانات للموظفين لفحصها حالياً." : `تم فحص بيانات ${empCount} موظف بنجاح (وضع التجربة - بدون مفتاح API).`,
+        alerts: empCount === 0 ? [] : [
           {
             id: 'al-1',
-            type: 'warning',
-            title: 'تنبيه انتهاء إقامة',
-            description: 'إقامة الموظف أحمد الفاضل تنتهي خلال 12 يوماً. يرجى تجديد الإقامة لتفادي غرامات التأخير.',
-            actionNeeded: 'تجديد المستند'
-          },
-          {
-            id: 'al-2',
-            type: 'danger',
-            title: 'ساعات تأخير غير مبررة',
-            description: 'الموظف سارة علي لديها 180 دقيقة تأخير هذا الشهر دون تقديم طلب استئذان.',
-            actionNeeded: 'خصم أو مراجعة'
-          },
-          {
-            id: 'al-3',
             type: 'info',
-            title: 'خصم قسط السلفة التلقائي',
-            description: 'تم رصد 3 موظفين لديهم سلف قائمة، سيتم خصم الأقساط تلقائياً من مسير الشهر.',
-            actionNeeded: 'تأكيد الخصم'
+            title: 'إشعار فحص أولي',
+            description: `النظام يعمل في وضع التجربة. تم رصد ${loanCount} سلف قائمة ستعالج تلقائياً.`,
+            actionNeeded: 'مراجعة عامة'
           }
         ]
       });

@@ -64,18 +64,18 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
     department: 'تكنولوجيا المعلومات',
     email: '',
     phone: '',
-    baseSalary: 10000,
-    housingAllowance: 2500,
-    transportAllowance: 800,
-    otherAllowances: 200,
-    gosiInsurance: 1100,
+    baseSalary: 0,
+    housingAllowance: 0,
+    transportAllowance: 0,
+    otherAllowances: 0,
+    gosiInsurance: 0,
     iqamaOrIdNumber: '',
-    iqamaExpiryDate: '2028-01-01',
+    iqamaExpiryDate: '',
     contractType: 'مصري',
-    contractExpiryDate: '2027-12-31',
+    contractExpiryDate: '',
     joinDate: new Date().toISOString().split('T')[0],
-    bankName: 'البنك الأهلي المصري',
-    bankAccount: 'EG',
+    bankName: '',
+    bankAccount: '',
     status: 'active',
   });
   const [initialAssetCode, setInitialAssetCode] = useState<string>('');
@@ -101,25 +101,25 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
     const created: Employee = {
       id: `emp-${Date.now()}`,
       employeeCode: newEmp.employeeCode?.trim() || `SHR-${Math.floor(100 + Math.random() * 900)}`,
-      name: newEmp.name || 'موظف جديد',
-      position: newEmp.position || 'موظف',
+      name: newEmp.name || '',
+      position: newEmp.position || '',
       department: newEmp.department || 'تكنولوجيا المعلومات',
-      email: newEmp.email || `${newEmp.name?.split(' ')[0]}@smarthr.eg`,
-      phone: newEmp.phone || '+20 100 000 0000',
+      email: newEmp.email || '',
+      phone: newEmp.phone || '',
       avatar: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80`,
-      baseSalary: Number(newEmp.baseSalary) || 8000,
-      housingAllowance: Number(newEmp.housingAllowance) || 2000,
-      transportAllowance: Number(newEmp.transportAllowance) || 800,
+      baseSalary: Number(newEmp.baseSalary) || 0,
+      housingAllowance: Number(newEmp.housingAllowance) || 0,
+      transportAllowance: Number(newEmp.transportAllowance) || 0,
       otherAllowances: Number(newEmp.otherAllowances) || 0,
-      gosiInsurance: Number(newEmp.gosiInsurance) || 1100,
-      iqamaOrIdNumber: newEmp.iqamaOrIdNumber || '29012010101234',
-      iqamaExpiryDate: newEmp.iqamaExpiryDate || '2028-01-01',
+      gosiInsurance: Number(newEmp.gosiInsurance) || 0,
+      iqamaOrIdNumber: newEmp.iqamaOrIdNumber || '',
+      iqamaExpiryDate: newEmp.iqamaExpiryDate || '',
       contractType: newEmp.contractType as any || 'مصري',
-      contractExpiryDate: newEmp.contractExpiryDate || '2028-01-01',
+      contractExpiryDate: newEmp.contractExpiryDate || '',
       joinDate: newEmp.joinDate || new Date().toISOString().split('T')[0],
-      status: 'active',
-      bankAccount: newEmp.bankAccount || 'EG00000000000000000000000000',
-      bankName: newEmp.bankName || 'البنك الأهلي المصري',
+      status: (newEmp.status as any) || 'active',
+      bankAccount: newEmp.bankAccount || '',
+      bankName: newEmp.bankName || '',
     };
 
     onAddEmployee(created, initialAssetCode);
@@ -131,18 +131,18 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
       department: 'تكنولوجيا المعلومات',
       email: '',
       phone: '',
-      baseSalary: 10000,
-      housingAllowance: 2500,
-      transportAllowance: 800,
-      otherAllowances: 200,
-      gosiInsurance: 1100,
+      baseSalary: 0,
+      housingAllowance: 0,
+      transportAllowance: 0,
+      otherAllowances: 0,
+      gosiInsurance: 0,
       iqamaOrIdNumber: '',
-      iqamaExpiryDate: '2028-01-01',
+      iqamaExpiryDate: '',
       contractType: 'مصري',
-      contractExpiryDate: '2027-12-31',
+      contractExpiryDate: '',
       joinDate: new Date().toISOString().split('T')[0],
-      bankName: 'البنك الأهلي المصري',
-      bankAccount: 'EG',
+      bankName: '',
+      bankAccount: '',
       status: 'active',
     });
   };
@@ -251,7 +251,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                 <th className="p-3.5">الكود الوظيفي</th>
                 <th className="p-3.5">القسم والوظيفة</th>
                 <th className="p-3.5">الراتب الأساسي</th>
-                <th className="p-3.5">إجمالي البدلات</th>
+                <th className="p-3.5">الحوافز والبدلات</th>
                 <th className="p-3.5">صلاحية الهوية / العقد</th>
                 <th className="p-3.5">الحالة</th>
                 <th className="p-3.5 text-center">الإجراءات</th>
@@ -476,7 +476,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                     <span className="font-extrabold">{activeProfileEmployee.baseSalary.toLocaleString()} {currencySymbol}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">بدل السكن:</span>
+                    <span className="text-slate-500">الحوافز والبدلات:</span>
                     <span className="font-bold text-emerald-600">+{activeProfileEmployee.housingAllowance.toLocaleString()} {currencySymbol}</span>
                   </div>
                   <div className="flex justify-between">
@@ -624,10 +624,10 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                 <input
                   required
                   type="text"
-                  value={newEmp.name}
+                  value={newEmp.name || ''}
                   onChange={(e) => setNewEmp({ ...newEmp, name: e.target.value })}
                   placeholder="مثال: أحمد عبد الفتاح الشناوي"
-                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
                 />
               </div>
 
@@ -636,10 +636,10 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                 <input
                   required
                   type="text"
-                  value={newEmp.position}
+                  value={newEmp.position || ''}
                   onChange={(e) => setNewEmp({ ...newEmp, position: e.target.value })}
                   placeholder="مثال: مهندس برمجيات"
-                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
                 />
               </div>
 
@@ -673,25 +673,115 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                 </div>
               </div>
 
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700 dark:text-slate-300">حالة العمل</label>
+                <select
+                  value={newEmp.status || 'active'}
+                  onChange={(e) => setNewEmp({ ...newEmp, status: e.target.value as any })}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold cursor-pointer transition-colors focus:ring-2 focus:ring-blue-500 focus:outline-none text-xs"
+                >
+                  <option value="active">على رأس العمل</option>
+                  <option value="on_leave">في إجازة</option>
+                  <option value="suspended">موقوف موقتاً</option>
+                  <option value="resigned">ترك العمل</option>
+                </select>
+              </div>
 
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700 dark:text-slate-300">رقم الهاتف</label>
+                <input
+                  type="text"
+                  value={newEmp.phone || ''}
+                  onChange={(e) => setNewEmp({ ...newEmp, phone: e.target.value })}
+                  placeholder="مثال: +20 100 000 0000"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700 dark:text-slate-300">تاريخ التعيين</label>
+                <input
+                  type="date"
+                  value={newEmp.joinDate || ''}
+                  onChange={(e) => setNewEmp({ ...newEmp, joinDate: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                />
+              </div>
 
               <div className="space-y-1">
                 <label className="font-bold text-slate-700 dark:text-slate-300">الراتب الأساسي ({currencySymbol})</label>
                 <input
                   type="number"
-                  value={newEmp.baseSalary}
-                  onChange={(e) => setNewEmp({ ...newEmp, baseSalary: Number(e.target.value) })}
+                  value={newEmp.baseSalary || ''}
+                  onChange={(e) => setNewEmp({ ...newEmp, baseSalary: e.target.value === '' ? 0 : Number(e.target.value) })}
+                  placeholder="أدخل الراتب الأساسي..."
                   className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-blue-600"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-slate-700 dark:text-slate-300">بدل السكن ({currencySymbol})</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300">الحوافز والبدلات ({currencySymbol})</label>
                 <input
                   type="number"
-                  value={newEmp.housingAllowance}
-                  onChange={(e) => setNewEmp({ ...newEmp, housingAllowance: Number(e.target.value) })}
+                  value={newEmp.housingAllowance || ''}
+                  onChange={(e) => setNewEmp({ ...newEmp, housingAllowance: e.target.value === '' ? 0 : Number(e.target.value) })}
+                  placeholder="أدخل الحوافز والبدلات..."
                   className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700 dark:text-slate-300">بدل المواصلات ({currencySymbol})</label>
+                <input
+                  type="number"
+                  value={newEmp.transportAllowance || ''}
+                  onChange={(e) => setNewEmp({ ...newEmp, transportAllowance: e.target.value === '' ? 0 : Number(e.target.value) })}
+                  placeholder="أدخل بدل المواصلات..."
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700 dark:text-slate-300">بدلات أخرى ({currencySymbol})</label>
+                <input
+                  type="number"
+                  value={newEmp.otherAllowances || ''}
+                  onChange={(e) => setNewEmp({ ...newEmp, otherAllowances: e.target.value === '' ? 0 : Number(e.target.value) })}
+                  placeholder="أدخل بدلات أخرى..."
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700 dark:text-slate-300">تأمين اجتماعي مستقطع ({currencySymbol})</label>
+                <input
+                  type="number"
+                  value={newEmp.gosiInsurance || ''}
+                  onChange={(e) => setNewEmp({ ...newEmp, gosiInsurance: e.target.value === '' ? 0 : Number(e.target.value) })}
+                  placeholder="أدخل التأمين الاجتماعي المستقطع..."
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-red-600"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700 dark:text-slate-300">اسم البنك</label>
+                <input
+                  type="text"
+                  value={newEmp.bankName || ''}
+                  onChange={(e) => setNewEmp({ ...newEmp, bankName: e.target.value })}
+                  placeholder="أدخل اسم البنك..."
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700 dark:text-slate-300">رقم الحساب البنكي / IBAN</label>
+                <input
+                  type="text"
+                  value={newEmp.bankAccount || ''}
+                  onChange={(e) => setNewEmp({ ...newEmp, bankAccount: e.target.value })}
+                  placeholder="أدخل رقم الحساب البنكي أو الـ IBAN..."
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono font-bold"
                 />
               </div>
 
@@ -699,10 +789,10 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                 <label className="font-bold text-slate-700 dark:text-slate-300">الرقم القومي / جواز السفر</label>
                 <input
                   type="text"
-                  value={newEmp.iqamaOrIdNumber}
+                  value={newEmp.iqamaOrIdNumber || ''}
                   onChange={(e) => setNewEmp({ ...newEmp, iqamaOrIdNumber: e.target.value })}
                   placeholder="الرقم القومي (14 رقم)"
-                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
                 />
               </div>
 
@@ -844,16 +934,6 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-slate-700 dark:text-slate-300">البريد الإلكتروني</label>
-                <input
-                  type="email"
-                  value={editEmpForm.email || ''}
-                  onChange={(e) => setEditEmpForm({ ...editEmpForm, email: e.target.value })}
-                  className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
-                />
-              </div>
-
-              <div className="space-y-1">
                 <label className="font-bold text-slate-700 dark:text-slate-300">رقم الهاتف</label>
                 <input
                   type="text"
@@ -886,7 +966,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-slate-700 dark:text-slate-300">بدل السكن ({currencySymbol})</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300">الحوافز والبدلات ({currencySymbol})</label>
                 <input
                   type="number"
                   value={editEmpForm.housingAllowance}

@@ -247,22 +247,22 @@ export const LoansAssetsView: React.FC<LoansAssetsViewProps> = ({
   const [showLoanModal, setShowLoanModal] = useState(false);
   const [newLoan, setNewLoan] = useState({
     employeeId: employees[0]?.id || '',
-    totalAmount: 10000,
-    monthlyInstallment: 1000,
-    startDate: '2026-08-01',
-    notes: 'سلفة شخصية طارئة',
+    totalAmount: 0,
+    monthlyInstallment: 0,
+    startDate: new Date().toISOString().split('T')[0],
+    notes: '',
   });
 
   // New Asset Modal
   const [showAssetModal, setShowAssetModal] = useState(false);
   const [newAsset, setNewAsset] = useState<Partial<Asset>>({
-    assetName: 'MacBook Pro M3 14"',
-    assetCode: `AST-LAP-00${assets.length + 1}`,
-    category: 'لاب توب',
-    serialNumber: 'SN-992211',
+    assetName: '',
+    assetCode: '',
+    category: '',
+    serialNumber: '',
     condition: 'جديد',
     status: 'المخزن',
-    value: 9500,
+    value: 0,
   });
 
   const handleCreateLoan = (e: React.FormEvent) => {
@@ -285,6 +285,13 @@ export const LoansAssetsView: React.FC<LoansAssetsViewProps> = ({
     };
 
     onAddLoan(created);
+    setNewLoan({
+      employeeId: employees[0]?.id || '',
+      totalAmount: 0,
+      monthlyInstallment: 0,
+      startDate: new Date().toISOString().split('T')[0],
+      notes: '',
+    });
     setShowLoanModal(false);
   };
 
@@ -295,15 +302,24 @@ export const LoansAssetsView: React.FC<LoansAssetsViewProps> = ({
     const created: Asset = {
       id: `ast-${Date.now()}`,
       assetName: newAsset.assetName,
-      assetCode: newAsset.assetCode || `AST-${Date.now()}`,
-      category: newAsset.category as any || 'لاب توب',
-      serialNumber: newAsset.serialNumber || 'SN-0000',
+      assetCode: newAsset.assetCode || `AST-${Date.now().toString().slice(-4)}`,
+      category: newAsset.category as any || 'عام',
+      serialNumber: newAsset.serialNumber || '-',
       condition: newAsset.condition as any || 'جديد',
       status: 'المخزن',
-      value: Number(newAsset.value) || 5000,
+      value: Number(newAsset.value) || 0,
     };
 
     onAddAsset(created);
+    setNewAsset({
+      assetName: '',
+      assetCode: '',
+      category: '',
+      serialNumber: '',
+      condition: 'جديد',
+      status: 'المخزن',
+      value: 0,
+    });
     setShowAssetModal(false);
   };
 
@@ -664,8 +680,9 @@ export const LoansAssetsView: React.FC<LoansAssetsViewProps> = ({
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">المبلغ الإجمالي للسلفة ({currencySymbol})</label>
                 <input
                   type="number"
-                  value={newLoan.totalAmount}
-                  onChange={(e) => setNewLoan({ ...newLoan, totalAmount: Number(e.target.value) })}
+                  value={newLoan.totalAmount || ''}
+                  onChange={(e) => setNewLoan({ ...newLoan, totalAmount: e.target.value === '' ? 0 : Number(e.target.value) })}
+                  placeholder="أدخل مبلغ السلفة..."
                   className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-extrabold text-blue-600"
                 />
               </div>
@@ -674,8 +691,9 @@ export const LoansAssetsView: React.FC<LoansAssetsViewProps> = ({
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">القسط الشهري للخصم التلقائي ({currencySymbol})</label>
                 <input
                   type="number"
-                  value={newLoan.monthlyInstallment}
-                  onChange={(e) => setNewLoan({ ...newLoan, monthlyInstallment: Number(e.target.value) })}
+                  value={newLoan.monthlyInstallment || ''}
+                  onChange={(e) => setNewLoan({ ...newLoan, monthlyInstallment: e.target.value === '' ? 0 : Number(e.target.value) })}
+                  placeholder="أدخل قيمة القسط الشهري..."
                   className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-emerald-600"
                 />
               </div>
@@ -686,6 +704,7 @@ export const LoansAssetsView: React.FC<LoansAssetsViewProps> = ({
                   type="text"
                   value={newLoan.notes}
                   onChange={(e) => setNewLoan({ ...newLoan, notes: e.target.value })}
+                  placeholder="أدخل سبب السلفة أو أي ملاحظات..."
                   className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
                 />
               </div>
@@ -734,9 +753,9 @@ export const LoansAssetsView: React.FC<LoansAssetsViewProps> = ({
                 <input
                   required
                   type="text"
-                  value={newAsset.assetName}
+                  value={newAsset.assetName || ''}
                   onChange={(e) => setNewAsset({ ...newAsset, assetName: e.target.value })}
-                  placeholder="مثال: MacBook Pro M3"
+                  placeholder="أدخل اسم الأصل أو العهدة..."
                   className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
                 />
               </div>
@@ -747,7 +766,7 @@ export const LoansAssetsView: React.FC<LoansAssetsViewProps> = ({
                   type="text"
                   value={newAsset.category || ''}
                   onChange={(e) => setNewAsset({ ...newAsset, category: e.target.value })}
-                  placeholder="مثال: لاب توب، هاتف ذكي، سيارة، إلخ"
+                  placeholder="الفئة (مثال: أجهزة إلكترونية، أثاث مكتب، سيارة)..."
                   className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
                 />
               </div>
@@ -756,8 +775,9 @@ export const LoansAssetsView: React.FC<LoansAssetsViewProps> = ({
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">الرقم التسلسلي (Serial Number)</label>
                 <input
                   type="text"
-                  value={newAsset.serialNumber}
+                  value={newAsset.serialNumber || ''}
                   onChange={(e) => setNewAsset({ ...newAsset, serialNumber: e.target.value })}
+                  placeholder="أدخل الرقم التسلسلي..."
                   className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
                 />
               </div>
@@ -766,8 +786,9 @@ export const LoansAssetsView: React.FC<LoansAssetsViewProps> = ({
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">القيمة التقديرية ({currencySymbol})</label>
                 <input
                   type="number"
-                  value={newAsset.value}
-                  onChange={(e) => setNewAsset({ ...newAsset, value: Number(e.target.value) })}
+                  value={newAsset.value || ''}
+                  onChange={(e) => setNewAsset({ ...newAsset, value: e.target.value === '' ? 0 : Number(e.target.value) })}
+                  placeholder="0"
                   className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
                 />
               </div>

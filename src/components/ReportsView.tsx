@@ -28,6 +28,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 }) => {
   const totalPayrollCost = payroll.reduce((sum, p) => sum + p.netSalary, 0);
   const totalOvertimeCost = payroll.reduce((sum, p) => sum + p.overtimePay, 0);
+  const totalOvertimeHours = payroll.reduce((sum, p) => sum + (p.overtimeHoursDay || 0) + (p.overtimeHoursNight || 0), 0);
   const totalDeductionsCost = payroll.reduce((sum, p) => sum + p.deductions + p.latePenaltyDeduction, 0);
 
   const recruitmentPlatforms = [
@@ -144,7 +145,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           <p className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">
             +{totalOvertimeCost.toLocaleString()} {currencySymbol}
           </p>
-          <p className="text-[10px] text-slate-400 mt-2">شملت 28 ساعة عمل إضافي هذا الشهر</p>
+          <p className="text-[10px] text-slate-400 mt-2">شملت {totalOvertimeHours} ساعة عمل إضافي هذا الشهر</p>
         </div>
 
         <div className="p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs">
@@ -188,16 +189,6 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                     <span className="text-[10px] text-slate-400">{plat.type}</span>
                   </div>
                 </div>
-              </div>
-
-              <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200 dark:border-slate-700">
-                <span className="text-emerald-600 font-bold flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>متصل بنجاح</span>
-                </span>
-                <span className="font-bold text-slate-700 dark:text-slate-300">
-                  {plat.activeJobsCount} إعلانات نشطة
-                </span>
               </div>
 
               <a
