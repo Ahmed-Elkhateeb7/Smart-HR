@@ -271,11 +271,11 @@ export const EmployeeEffectsView: React.FC<EmployeeEffectsViewProps> = ({
 
       {/* Employees Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {filteredEmployees.map((employee) => {
+        {filteredEmployees.map((employee, idx) => {
           const effects = calculateEmployeeEffects(employee);
           
           return (
-            <div key={employee.id} className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+            <div key={`eff-emp-${employee.id}-${idx}`} className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center border border-indigo-100 dark:border-indigo-800/50">

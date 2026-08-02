@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import {
   Users,
   Search,
@@ -18,7 +19,11 @@ import {
   Laptop,
   Edit3,
   Trash2,
-  ChevronDown
+  ChevronDown,
+  Upload,
+  Download,
+  FileSpreadsheet,
+  Check
 } from 'lucide-react';
 import { Employee, Asset, Loan, Department } from '../types';
 
@@ -56,6 +61,223 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
   const [showNewDeptDropdown, setShowNewDeptDropdown] = useState(false);
   const [showEditDeptDropdown, setShowEditDeptDropdown] = useState(false);
 
+  // Excel Import States
+  const [showExcelImportModal, setShowExcelImportModal] = useState(false);
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [parsedImportEmps, setParsedImportEmps] = useState<Employee[]>([]);
+  const [importStatusMsg, setImportStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const excelInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Helper date parser
+  const parseExcelDate = (val: any): string => {
+    if (!val) return '';
+    if (typeof val === 'number') {
+      try {
+        const dateObj = XLSX.SSF.parse_date_code(val);
+        if (dateObj) {
+          const y = dateObj.y;
+          const m = String(dateObj.m).padStart(2, '0');
+          const d = String(dateObj.d).padStart(2, '0');
+          return `${y}-${m}-${d}`;
+        }
+      } catch {
+        // fallback
+      }
+    }
+    const str = String(val).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+    if (/^\d{4}\/\d{2}\/\d{2}$/.test(str)) return str.replace(/\//g, '-');
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
+      const parts = str.split('/');
+      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+    if (/^\d{2}-\d{2}-\d{4}$/.test(str)) {
+      const parts = str.split('-');
+      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+    return str || '';
+  };
+
+  // Download Sample Excel Template
+  const handleDownloadExcelTemplate = () => {
+    const sampleData = [
+      {
+        'الكود الوظيفي': '101',
+        'اسم الموظف': 'أحمد محمد علي',
+        'القسم': 'تكنولوجيا المعلومات',
+        'الوظيفة': 'مطور برمجيات',
+        'الراتب الأساسي': 5000,
+        'صلاحية الهوية': '2028-12-31',
+        'الحالة': 'نشط',
+      },
+      {
+        'الكود الوظيفي': '102',
+        'اسم الموظف': 'سارة محمود عبدالله',
+        'القسم': 'الموارد البشرية',
+        'الوظيفة': 'أخصائي توظيف',
+        'الراتب الأساسي': 4500,
+        'صلاحية الهوية': '2027-06-15',
+        'الحالة': 'نشط',
+      },
+      {
+        'الكود الوظيفي': '103',
+        'اسم الموظف': 'خالد إبراهيم',
+        'القسم': 'الحسابات',
+        'الوظيفة': 'محاسب عام',
+        'الراتب الأساسي': 4800,
+        'صلاحية الهوية': '2026-11-20',
+        'الحالة': 'إجازة',
+      },
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(sampleData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'الموظفين');
+    XLSX.writeFile(workbook, 'نموذج_استيراد_الموظفين.xlsx');
+  };
+
+  // Process selected file
+  const handleExcelFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    setExcelFile(file);
+    setImportStatusMsg(null);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const buffer = evt.target?.result;
+        if (!buffer) return;
+        const wb = XLSX.read(buffer, { type: 'array' });
+        const firstSheetName = wb.SheetNames[0];
+        const ws = wb.Sheets[firstSheetName];
+        const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' });
+
+        if (!rows || rows.length === 0) {
+          setImportStatusMsg({ type: 'error', text: 'الملف فارغ أو لا يحتوي على بيانات صحيحة.' });
+          setParsedImportEmps([]);
+          return;
+        }
+
+        const parsedList: Employee[] = [];
+        rows.forEach((row, idx) => {
+          let name = '';
+          let employeeCode = '';
+          let department = 'عام';
+          let position = 'موظف';
+          let baseSalary = 0;
+          let iqamaExpiryDate = '';
+          let statusStr = '';
+
+          for (const [key, val] of Object.entries(row)) {
+            const k = key.replace(/[\s_\-]/g, '').toLowerCase();
+            const v = String(val !== undefined && val !== null ? val : '').trim();
+            if (!v) continue;
+
+            if ((k.includes('اسم') || k.includes('name') || k.includes('موظف')) && !k.includes('كود') && !k.includes('رقم') && !k.includes('حالة')) {
+              name = v;
+            } else if (k.includes('كود') || k.includes('رقموظيفي') || k.includes('الكود') || k.includes('code') || k === 'id') {
+              employeeCode = v;
+            } else if (k.includes('قسم') || k.includes('department') || k.includes('dept')) {
+              department = v;
+            } else if (k.includes('وظيفة') || k.includes('مسمى') || k.includes('position') || k.includes('title') || k.includes('job')) {
+              position = v;
+            } else if (k.includes('راتب') || k.includes('salary') || k.includes('اساسي') || k.includes('أساسي') || k.includes('basic')) {
+              const num = parseFloat(v.replace(/[^0-9.]/g, ''));
+              if (!isNaN(num)) baseSalary = num;
+            } else if (k.includes('هوية') || k.includes('إقامة') || k.includes('اقامة') || k.includes('انتهاء') || k.includes('صلاحية') || k.includes('expiry') || k.includes('iqama')) {
+              iqamaExpiryDate = parseExcelDate(val);
+            } else if (k.includes('حالة') || k.includes('status')) {
+              statusStr = v;
+            }
+          }
+
+          if (!employeeCode) {
+            for (const [key, val] of Object.entries(row)) {
+              if (/code|id|رقم|كود/i.test(key)) {
+                employeeCode = String(val).trim();
+                break;
+              }
+            }
+          }
+
+          if (!name && !employeeCode) return;
+
+          const cleanCode = employeeCode.replace(/\D/g, '') || employeeCode || `${Date.now() + idx}`;
+          const finalCode = employeeCode || cleanCode;
+          const finalName = name || `موظف رقم (${cleanCode})`;
+
+          let finalStatus: 'active' | 'on_leave' | 'suspended' | 'resigned' = 'active';
+          const sLower = statusStr.toLowerCase();
+          if (sLower.includes('إجازة') || sLower.includes('اجازة') || sLower.includes('leave')) {
+            finalStatus = 'on_leave';
+          } else if (sLower.includes('موقف') || sLower.includes('معلق') || sLower.includes('suspended')) {
+            finalStatus = 'suspended';
+          } else if (sLower.includes('استقال') || sLower.includes('منتهي') || sLower.includes('متوقف') || sLower.includes('غير نشط') || sLower.includes('resigned') || sLower.includes('terminated')) {
+            finalStatus = 'resigned';
+          }
+
+          const newEmp: Employee = {
+            id: `emp-dat-${cleanCode}`,
+            employeeCode: finalCode,
+            name: finalName,
+            position: position || 'موظف',
+            department: department || 'عام',
+            email: '',
+            phone: '',
+            avatar: '',
+            baseSalary: baseSalary || 0,
+            housingAllowance: 0,
+            transportAllowance: 0,
+            otherAllowances: 0,
+            gosiInsurance: 0,
+            iqamaOrIdNumber: finalCode,
+            iqamaExpiryDate: iqamaExpiryDate || '',
+            contractType: '',
+            contractExpiryDate: '',
+            joinDate: new Date().toISOString().split('T')[0],
+            status: finalStatus,
+            bankName: '',
+            bankAccount: '',
+          };
+
+          parsedList.push(newEmp);
+        });
+
+        if (parsedList.length === 0) {
+          setImportStatusMsg({ type: 'error', text: 'لم يتم التعرف على أي بيانات موظفين صالحة في الملف.' });
+        } else {
+          setImportStatusMsg({ type: 'success', text: `تم التعرف على ${parsedList.length} موظف بنجاح.` });
+        }
+        setParsedImportEmps(parsedList);
+      } catch (err) {
+        console.error('Error parsing Excel:', err);
+        setImportStatusMsg({ type: 'error', text: 'حدث خطأ أثناء قراءة ملف Excel. يرجى التأكد من بصيغة الملف.' });
+        setParsedImportEmps([]);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  // Submit Bulk Import
+  const handleConfirmImport = () => {
+    if (parsedImportEmps.length === 0) return;
+    parsedImportEmps.forEach((emp) => {
+      onAddEmployee(emp);
+    });
+    setImportStatusMsg({
+      type: 'success',
+      text: `تم استيراد وحفظ ${parsedImportEmps.length} موظف بنجاح في قاعدة البيانات!`,
+    });
+    setTimeout(() => {
+      setShowExcelImportModal(false);
+      setParsedImportEmps([]);
+      setExcelFile(null);
+      setImportStatusMsg(null);
+    }, 1200);
+  };
+
   // New Employee Form State
   const [newEmp, setNewEmp] = useState<Partial<Employee>>({
     employeeCode: '',
@@ -80,8 +302,18 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
   });
   const [initialAssetCode, setInitialAssetCode] = useState<string>('');
 
-  // Filter Employees
-  const filteredEmployees = employees.filter((emp) => {
+  // Filter & Deduplicate Employees
+  const uniqueEmployeesMap = new Map<string, Employee>();
+  employees.forEach((emp) => {
+    if (!emp) return;
+    const key = emp.id || emp.employeeCode;
+    if (key && !uniqueEmployeesMap.has(key)) {
+      uniqueEmployeesMap.set(key, emp);
+    }
+  });
+  const uniqueEmployees = Array.from(uniqueEmployeesMap.values());
+
+  const filteredEmployees = uniqueEmployees.filter((emp) => {
     const matchesSearch =
       emp.name.includes(searchTerm) ||
       emp.employeeCode.includes(searchTerm) ||
@@ -176,14 +408,25 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
           </p>
         </div>
 
-        <button
-          id="add-employee-modal-open-btn"
-          onClick={() => setShowAddModal(true)}
-          className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs md:text-sm shadow-sm shadow-blue-600/30 flex items-center justify-center gap-2 transition-all shrink-0 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>إضافة موظف جديد (Onboarding)</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <button
+            id="import-excel-modal-btn"
+            onClick={() => setShowExcelImportModal(true)}
+            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs md:text-sm shadow-sm shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>استيراد من إكسل (Excel)</span>
+          </button>
+
+          <button
+            id="add-employee-modal-open-btn"
+            onClick={() => setShowAddModal(true)}
+            className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs md:text-sm shadow-sm shadow-blue-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>إضافة موظف جديد (Onboarding)</span>
+          </button>
+        </div>
       </div>
 
       {/* Search & Filters Toolbar */}
@@ -1052,6 +1295,186 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Excel Import Modal */}
+      {showExcelImportModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl max-w-3xl w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700 my-8 space-y-6">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                  <FileSpreadsheet className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-extrabold text-slate-900 dark:text-white">
+                    استيراد بيانات الموظفين من ملف Excel
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    يمكنك رفع ملف (.xlsx, .xls, .csv) يحتوي على بيانات الكادر لترفيقها مباشرة
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowExcelImportModal(false);
+                  setParsedImportEmps([]);
+                  setExcelFile(null);
+                  setImportStatusMsg(null);
+                }}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Template Download and Instructions */}
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700/80 space-y-3">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    الأعمدة المدعومة في ملف الاكسل:
+                  </h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                    اسم الموظف • الكود الوظيفي • القسم • الوظيفة • الراتب الأساسي • صلاحية الهوية • الحالة
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDownloadExcelTemplate}
+                  className="px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 font-bold text-xs flex items-center gap-2 transition-colors shrink-0 cursor-pointer"
+                >
+                  <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>تحميل نموذج Excel المعتمد</span>
+                </button>
+              </div>
+            </div>
+
+            {/* File Upload Drop Zone */}
+            <div className="space-y-3">
+              <input
+                type="file"
+                ref={excelInputRef}
+                accept=".xlsx, .xls, .csv"
+                onChange={handleExcelFileChange}
+                className="hidden"
+              />
+              <div
+                onClick={() => excelInputRef.current?.click()}
+                className="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 rounded-2xl p-6 text-center cursor-pointer bg-slate-50/50 dark:bg-slate-900/20 hover:bg-emerald-50/30 transition-all flex flex-col items-center justify-center gap-2"
+              >
+                <Upload className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+                <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  {excelFile ? `الملف المحدد: ${excelFile.name}` : 'اضغط هنا لاختيار ملف Excel أو قم بسحبه وإسقاطه'}
+                </p>
+                <p className="text-[10px] text-slate-400">يدعم صيغ Excel (.xlsx, .xls, .csv)</p>
+              </div>
+            </div>
+
+            {/* Status Message */}
+            {importStatusMsg && (
+              <div
+                className={`p-3.5 rounded-2xl text-xs font-bold flex items-center gap-2.5 ${
+                  importStatusMsg.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                    : 'bg-rose-50 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                }`}
+              >
+                {importStatusMsg.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+                )}
+                <span>{importStatusMsg.text}</span>
+              </div>
+            )}
+
+            {/* Parsed Employees Preview Table */}
+            {parsedImportEmps.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    معاينة البيانات التي تم التعرف عليها ({parsedImportEmps.length} موظف):
+                  </h4>
+                </div>
+
+                <div className="max-h-60 overflow-y-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+                  <table className="w-full text-right text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-800 sticky top-0 border-b border-slate-200 dark:border-slate-700 font-bold text-slate-600 dark:text-slate-300">
+                      <tr>
+                        <th className="p-2.5">الكود</th>
+                        <th className="p-2.5">الاسم</th>
+                        <th className="p-2.5">القسم</th>
+                        <th className="p-2.5">الوظيفة</th>
+                        <th className="p-2.5">الراتب الأساسي</th>
+                        <th className="p-2.5">صلاحية الهوية</th>
+                        <th className="p-2.5 text-center">الحالة</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {parsedImportEmps.map((emp, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                          <td className="p-2.5 font-mono font-bold text-blue-600 dark:text-blue-400">
+                            {emp.employeeCode}
+                          </td>
+                          <td className="p-2.5 font-bold text-slate-800 dark:text-slate-200">{emp.name}</td>
+                          <td className="p-2.5 text-slate-600 dark:text-slate-400">{emp.department}</td>
+                          <td className="p-2.5 text-slate-600 dark:text-slate-400">{emp.position}</td>
+                          <td className="p-2.5 font-bold text-slate-800 dark:text-slate-200">
+                            {emp.baseSalary.toLocaleString()} {currencySymbol}
+                          </td>
+                          <td className="p-2.5 text-slate-600 dark:text-slate-400 font-mono">
+                            {emp.iqamaExpiryDate}
+                          </td>
+                          <td className="p-2.5 text-center">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                emp.status === 'active'
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                  : emp.status === 'on_leave'
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                  : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                              }`}
+                            >
+                              {emp.status === 'active' ? 'نشط' : emp.status === 'on_leave' ? 'إجازة' : 'متوقف/غير نشط'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowExcelImportModal(false);
+                  setParsedImportEmps([]);
+                  setExcelFile(null);
+                  setImportStatusMsg(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                disabled={parsedImportEmps.length === 0}
+                onClick={handleConfirmImport}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs shadow-sm shadow-emerald-600/30 flex items-center gap-2 cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>تأكيد واستيراد ({parsedImportEmps.length}) موظف</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -322,9 +322,11 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
                   <div className="p-3.5 rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900 flex items-center justify-between text-purple-900 dark:text-purple-200 font-bold">
                     <span className="flex items-center gap-2">
                       <DollarSign className="w-4 h-4 text-purple-600" />
-                      <span>نطاق الراتب المقترح في السوق:</span>
+                      <span>نطاق الراتب المقترح بالسوق المصري (EGP):</span>
                     </span>
-                    <span className="text-sm font-black">{jdResult.suggestedSalaryRange}</span>
+                    <span className="text-sm font-black">
+                      {String(jdResult.suggestedSalaryRange).replace(/ريال سعودي|ريال/g, 'جنيه مصري')}
+                    </span>
                   </div>
                 )}
               </div>

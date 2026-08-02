@@ -66,6 +66,70 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
   const [showAiAnalysis, setShowAiAnalysis] = useState<boolean>(false);
   const [notification, setNotification] = useState<string | null>(null);
 
+  const getEmpDisplayName = (name?: string, empCodeOrId?: string) => {
+    const cleanCode = (empCodeOrId || '').replace(/[\uFFFD\?]/g, '').trim();
+    const rawNum = parseInt(cleanCode.replace(/\D/g, ''), 10);
+
+    if (employees && employees.length > 0) {
+      const matched = employees.find((e) => {
+        if (!e) return false;
+        const eCode = (e.employeeCode || '').replace(/[\uFFFD\?]/g, '').trim();
+        const eId = (e.id || '').replace(/[\uFFFD\?]/g, '').trim();
+        const eIqama = (e.iqamaOrIdNumber || '').replace(/[\uFFFD\?]/g, '').trim();
+
+        if (
+          cleanCode &&
+          (eCode === cleanCode ||
+            eId === cleanCode ||
+            eId === `emp-${cleanCode}` ||
+            eId === `emp-dat-${cleanCode}` ||
+            eIqama === cleanCode ||
+            eIqama === `DAT-${cleanCode}`)
+        ) {
+          return true;
+        }
+
+        if (cleanCode && eCode && eCode.replace(/^0+/, '') === cleanCode.replace(/^0+/, '')) {
+          return true;
+        }
+
+        const empCodeNum = parseInt(eCode.replace(/\D/g, ''), 10);
+        const empIdNum = parseInt(eId.replace(/\D/g, ''), 10);
+
+        if (
+          !isNaN(rawNum) &&
+          rawNum > 0 &&
+          ((!isNaN(empCodeNum) && rawNum === empCodeNum) || (!isNaN(empIdNum) && rawNum === empIdNum))
+        ) {
+          return true;
+        }
+        return false;
+      });
+
+      if (matched && matched.name) {
+        const cleanName = matched.name.replace(/[\uFFFD\?]/g, '').trim();
+        if (cleanName.length >= 2 && !cleanName.includes('?')) {
+          return cleanName;
+        }
+      }
+    }
+
+    if (name) {
+      const cleaned = name.replace(/[\uFFFD\?]/g, '').trim();
+      if (
+        cleaned.length >= 2 &&
+        !cleaned.includes('?') &&
+        !cleaned.includes('\uFFFD') &&
+        !cleaned.startsWith('موظف بصمة رقم')
+      ) {
+        return cleaned;
+      }
+    }
+
+    const numId = cleanCode ? cleanCode.replace(/\D/g, '') || cleanCode : '1';
+    return `موظف بصمة رقم (${numId})`;
+  };
+
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const datePickerRef = useRef<HTMLDivElement>(null);
   const [pickerYear, setPickerYear] = useState<number>(() => {
@@ -249,8 +313,18 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
     onUpdatePayrollRecord(updated);
   };
 
-  // Get current active month records
-  const monthRecords = payrollRecords.filter((p) => p.month === selectedMonth);
+  // Get current active month records (deduplicated)
+  const rawMonthRecords = payrollRecords.filter((p) => p.month === selectedMonth);
+  const monthRecordsMap = new Map<string, PayrollRecord>();
+  rawMonthRecords.forEach((p) => {
+    if (!p) return;
+    const key = p.id || p.employeeId;
+    if (!monthRecordsMap.has(key)) {
+      monthRecordsMap.set(key, p);
+    }
+  });
+  const monthRecords = Array.from(monthRecordsMap.values());
+
   const isApproved =
     monthRecords.length > 0 &&
     monthRecords.every((p) => p.status === "approved");
@@ -1080,7 +1154,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                 </td>
               </tr>
             ) : (
-              filteredRecords.map((rec) => {
+              filteredRecords.map((rec, idx) => {
                 const dayHours =
                   rec.overtimeHoursDay !== undefined ? rec.overtimeHoursDay : 0;
                 const nightHours =
@@ -1095,13 +1169,13 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
 
                 return (
                   <tr
-                    key={rec.id}
+                    key={`pay-${rec.id || idx}-${idx}`}
                     className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors"
                   >
                     {/* Employee column */}
                     <td className="p-3.5">
                       <p className="font-extrabold text-slate-900 dark:text-white leading-snug">
-                        {rec.employeeName}
+                        {getEmpDisplayName(rec.employeeName, rec.employeeCode || rec.employeeId)}
                       </p>
                       <p className="text-[10px] text-slate-400 font-medium mt-0.5">
                         {rec.position} •{" "}
@@ -1295,17 +1369,17 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                 </td>
               </tr>
             ) : (
-              filteredRecords.map((rec) => {
+              filteredRecords.map((rec, idx) => {
                 const dayHours = rec.overtimeHoursDay !== undefined ? rec.overtimeHoursDay : 0;
                 const nightHours = rec.overtimeHoursNight !== undefined ? rec.overtimeHoursNight : 0;
                 const fridayHours = rec.fridayOvertimeHours !== undefined ? rec.fridayOvertimeHours : 0;
 
                 const emp = employees.find((e) => e.id === rec.employeeId);
-                const empName = emp ? emp.name : "غير معروف";
-                const jobTitle = emp ? emp.position : "غير محدد";
+                const empName = getEmpDisplayName(rec.employeeName, rec.employeeCode || rec.employeeId);
+                const jobTitle = emp ? emp.position : (rec.position || "غير محدد");
                 
                 return (
-                  <tr key={`ot-${rec.id}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                  <tr key={`ot-${rec.id || idx}-${idx}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                     <td className="p-3.5">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center font-bold text-indigo-700 dark:text-indigo-300">

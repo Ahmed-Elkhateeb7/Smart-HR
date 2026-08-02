@@ -29,7 +29,7 @@ export interface Employee {
   gosiInsurance: number; // Insurance deduction
   iqamaOrIdNumber: string;
   iqamaExpiryDate: string; // YYYY-MM-DD
-  contractType: 'مصري';
+  contractType: string;
   contractExpiryDate: string; // YYYY-MM-DD
   joinDate: string; // YYYY-MM-DD
   status: EmployeeStatus;

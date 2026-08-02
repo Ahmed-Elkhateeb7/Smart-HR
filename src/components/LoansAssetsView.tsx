@@ -445,12 +445,12 @@ export const LoansAssetsView: React.FC<LoansAssetsViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {loans.map((loan) => {
+            {loans.map((loan, idx) => {
               const percentagePaid = Math.round((loan.paidAmount / loan.totalAmount) * 100);
 
               return (
                 <div
-                  key={loan.id}
+                  key={`loan-${loan.id}-${idx}`}
                   className="p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs space-y-4"
                 >
                   <div className="flex items-center justify-between">
@@ -552,12 +552,12 @@ export const LoansAssetsView: React.FC<LoansAssetsViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {assets.map((ast) => {
+            {assets.map((ast, idx) => {
               const Icon = getCategoryIcon(ast.category);
 
               return (
                 <div
-                  key={ast.id}
+                  key={`ast-${ast.id}-${idx}`}
                   className="p-5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs space-y-3"
                 >
                   <div className="flex items-start justify-between">

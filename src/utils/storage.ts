@@ -54,10 +54,35 @@ function safeSave(key: string, data: any): void {
   }
 }
 
+// Deduplicate and clean employee records helper
+function deduplicateEmployees(emps: Employee[]): Employee[] {
+  if (!Array.isArray(emps)) return [];
+  const map = new Map<string, Employee>();
+  emps.forEach((emp) => {
+    if (!emp) return;
+    const cleanId = (emp.id || '').replace(/[\uFFFD\?]/g, '').trim();
+    const cleanCode = (emp.employeeCode || '').replace(/[\uFFFD\?]/g, '').trim();
+    const key = cleanId || cleanCode;
+    if (key && !map.has(key)) {
+      // Clean dummy test data
+      const cleanedEmp: Employee = {
+        ...emp,
+        phone: emp.phone === '0500000000' ? '' : (emp.phone || ''),
+        email: (emp.email && /^emp.*@company\.com$/.test(emp.email)) ? '' : (emp.email || ''),
+        iqamaExpiryDate: emp.iqamaExpiryDate === '2028-12-31' ? '' : (emp.iqamaExpiryDate || ''),
+        contractExpiryDate: emp.contractExpiryDate === '2028-12-31' ? '' : (emp.contractExpiryDate || ''),
+      };
+      map.set(key, cleanedEmp);
+    }
+  });
+  return Array.from(map.values());
+}
+
 // Load all initial state
 export function loadAllState() {
+  const loadedEmps = safeParse<Employee[]>(STORAGE_KEYS.EMPLOYEES, initialEmployees);
   return {
-    employees: safeParse<Employee[]>(STORAGE_KEYS.EMPLOYEES, initialEmployees),
+    employees: deduplicateEmployees(loadedEmps),
     attendanceRecords: safeParse<AttendanceRecord[]>(STORAGE_KEYS.ATTENDANCE, initialAttendanceRecords),
     payrollRecords: safeParse<PayrollRecord[]>(STORAGE_KEYS.PAYROLL, initialPayrollRecords),
     loans: safeParse<Loan[]>(STORAGE_KEYS.LOANS, initialLoans),

@@ -136,43 +136,71 @@ export default function App() {
 
   // Handle Add Employee
   const handleAddEmployee = (newEmp: Employee, initialAssetCode?: string) => {
-    setEmployees((prev) => [newEmp, ...prev]);
+    setEmployees((prev) => {
+      const existing = prev.find(
+        (e) => e.id === newEmp.id || (e.employeeCode && newEmp.employeeCode && e.employeeCode === newEmp.employeeCode)
+      );
+      const mergedEmp = existing ? { ...existing, ...newEmp } : newEmp;
+      const filtered = prev.filter(
+        (e) => e.id !== mergedEmp.id && (!e.employeeCode || !mergedEmp.employeeCode || e.employeeCode !== mergedEmp.employeeCode)
+      );
+      return [mergedEmp, ...filtered];
+    });
 
-    // Create default Payroll Record for new employee
-    const newPayrollRec: PayrollRecord = {
-      id: `pay-${Date.now()}`,
-      employeeId: newEmp.id,
-      employeeName: newEmp.name,
-      employeeCode: newEmp.employeeCode,
-      position: newEmp.position,
-      department: newEmp.department,
-      month: '2026-07',
-      baseSalary: newEmp.baseSalary,
-      allowances: newEmp.housingAllowance + newEmp.transportAllowance + newEmp.otherAllowances,
-      overtimeHours: 0,
-      overtimeRate: 1.5,
-      overtimePay: 0,
-      overtimeHoursDay: 0,
-      overtimeHoursNight: 0,
-      overtimeRateDay: 1.5,
-      overtimeRateNight: 2.0,
-      fridayOvertimeHours: 0,
-      fridayOvertimeRate: 2.0,
-      fridayOvertimePay: 0,
-      bonus: 0,
-      deductions: 0,
-      latePenaltyDeduction: 0,
-      loanInstallment: 0,
-      socialInsurance: newEmp.gosiInsurance,
-      netSalary:
-        newEmp.baseSalary +
-        newEmp.housingAllowance +
-        newEmp.transportAllowance +
-        newEmp.otherAllowances -
-        newEmp.gosiInsurance,
-      status: 'draft',
-    };
-    setPayrollRecords((prev) => [newPayrollRec, ...prev]);
+    // Create or update default Payroll Record for new employee
+    setPayrollRecords((prev) => {
+      const existingIdx = prev.findIndex((p) => p.employeeId === newEmp.id && p.month === '2026-07');
+      if (existingIdx >= 0) {
+        const copy = [...prev];
+        copy[existingIdx] = {
+          ...copy[existingIdx],
+          employeeName: newEmp.name,
+          employeeCode: newEmp.employeeCode,
+          position: newEmp.position,
+          department: newEmp.department,
+          baseSalary: newEmp.baseSalary,
+          allowances: newEmp.housingAllowance + newEmp.transportAllowance + newEmp.otherAllowances,
+          socialInsurance: newEmp.gosiInsurance,
+        };
+        return copy;
+      }
+
+      const uniquePayId = `pay-${newEmp.id}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const newPayrollRec: PayrollRecord = {
+        id: uniquePayId,
+        employeeId: newEmp.id,
+        employeeName: newEmp.name,
+        employeeCode: newEmp.employeeCode,
+        position: newEmp.position,
+        department: newEmp.department,
+        month: '2026-07',
+        baseSalary: newEmp.baseSalary,
+        allowances: newEmp.housingAllowance + newEmp.transportAllowance + newEmp.otherAllowances,
+        overtimeHours: 0,
+        overtimeRate: 1.5,
+        overtimePay: 0,
+        overtimeHoursDay: 0,
+        overtimeHoursNight: 0,
+        overtimeRateDay: 1.5,
+        overtimeRateNight: 2.0,
+        fridayOvertimeHours: 0,
+        fridayOvertimeRate: 2.0,
+        fridayOvertimePay: 0,
+        bonus: 0,
+        deductions: 0,
+        latePenaltyDeduction: 0,
+        loanInstallment: 0,
+        socialInsurance: newEmp.gosiInsurance,
+        netSalary:
+          newEmp.baseSalary +
+          newEmp.housingAllowance +
+          newEmp.transportAllowance +
+          newEmp.otherAllowances -
+          newEmp.gosiInsurance,
+        status: 'draft',
+      };
+      return [newPayrollRec, ...prev];
+    });
 
     // Assign initial asset if provided
     if (initialAssetCode) {
@@ -328,13 +356,35 @@ export default function App() {
 
   // Update Attendance
   const handleUpdateAttendanceRecord = (updatedRec: AttendanceRecord) => {
-    setAttendanceRecords((prev) =>
-      prev.map((rec) => (rec.id === updatedRec.id ? updatedRec : rec))
-    );
+    setAttendanceRecords((prev) => {
+      const idx = prev.findIndex(
+        (rec) =>
+          rec.id === updatedRec.id ||
+          (rec.employeeId === updatedRec.employeeId && rec.date === updatedRec.date)
+      );
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = { ...copy[idx], ...updatedRec };
+        return copy;
+      }
+      return [...prev, updatedRec];
+    });
   };
 
   const handleAddAttendanceRecord = (newRec: AttendanceRecord) => {
-    setAttendanceRecords((prev) => [...prev, newRec]);
+    setAttendanceRecords((prev) => {
+      const idx = prev.findIndex(
+        (rec) =>
+          rec.id === newRec.id ||
+          (rec.employeeId === newRec.employeeId && rec.date === newRec.date)
+      );
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = { ...copy[idx], ...newRec };
+        return copy;
+      }
+      return [...prev, newRec];
+    });
   };
 
   // Add Shift
@@ -616,7 +666,10 @@ export default function App() {
             <AttendanceView
               attendance={attendanceRecords}
               shifts={shifts}
+              employees={employees}
               onUpdateAttendanceRecord={handleUpdateAttendanceRecord}
+              onAddAttendanceRecord={handleAddAttendanceRecord}
+              onAddEmployee={handleAddEmployee}
               onAddShift={handleAddShift}
               onUpdateShift={handleUpdateShift}
             />

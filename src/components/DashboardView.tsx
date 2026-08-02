@@ -348,13 +348,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </p>
 
           <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
-            {employees.map((emp) => {
+            {employees.map((emp, idx) => {
               const att = attendance.find((a) => a.employeeId === emp.id);
               const isPresent = att?.status === 'present' || att?.status === 'late';
 
               return (
                 <div
-                  key={emp.id}
+                  key={`dash-emp-${emp.id}-${idx}`}
                   className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700/70 flex items-center justify-between gap-3 text-xs bg-white/50 dark:bg-slate-900/30"
                 >
                   <div className="flex items-center gap-2.5 overflow-hidden">
