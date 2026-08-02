@@ -48,35 +48,64 @@ export const AiAssistantView: React.FC<AiAssistantViewProps> = ({
     if (!jobTitle) return;
 
     setIsGeneratingJd(true);
+    const titleClean = jobTitle.trim();
+    const deptClean = department.trim() || 'الموارد البشرية والعمليات';
+    const levelClean = seniorityLevel.trim() || 'متوسط الخبرة';
+    const skillsArray = keySkills
+      ? keySkills.split(',').map((s) => s.trim()).filter(Boolean)
+      : ['التفكير التحليلي', 'إدارة الوقت والأولويات', 'التواصل الفعال'];
+
+    // Instant preview draft for immediate visual feedback
+    const instantDraft = {
+      title: titleClean,
+      summary: `توصيف وظيفي متكامل لمسمى ${titleClean} في قسم ${deptClean}. يتطلب هذا الدور تنفيذ الخطط التشغيلية ومتابعة الأداء اليومي وفقاً لمتطلبات مستوى الخبرة (${levelClean}).`,
+      responsibilities: [
+        `إدارة ومتابعة كافة المهام والمسؤوليات التشغيلية اليومية الخاصة بـ ${titleClean}`,
+        `المشاركة في تطوير الخطط وآليات العمل الخاصة بقسم ${deptClean}`,
+        'التنسيق والتكامل مع فرق العمل والأقسام ذات الصلة لضمان جودة الأداء',
+        'متابعة تطبيق معايير الجودة والالتزام بلوائح وسياسات العمل الداخلية',
+        'إعداد التقارير الدورية وتحليل مخرجات العمل ورفعها للإدارة المباشرة'
+      ],
+      requiredSkills: [
+        'إتقان استخدام تطبيقات وبرامج الحاسوب ذات الصلة',
+        'القدرة على حل المشكلات واتخاذ القرارات السريعة',
+        'مهارات التواصل الفعال والعمل ضمن فريق',
+        ...skillsArray
+      ],
+      kpis: [
+        'نسبة إنجاز المهام والتكليفات في المواعيد المحددة (Target: 95%)',
+        'مستوى جودة المخرجات ونسبة دقة البيانات المعالجة (Target: < 2% أخطاء)',
+        'معدل رضا العملاء الداخليين وأفراد الفريق (Target: 90%)',
+        'مدى الالتزام بالتعليمات الإدارية ولائحة انضباط العمل'
+      ],
+      suggestedSalaryRange: '15,000 - 28,000 جنيه مصري'
+    };
+
+    setJdResult(instantDraft);
+
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+
       const res = await fetch('/api/ai/job-description', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          jobTitle,
-          department,
-          seniorityLevel,
+          jobTitle: titleClean,
+          department: deptClean,
+          seniorityLevel: levelClean,
           keySkills,
         }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
+
       const data = await res.json();
       if (data.success && data.data) {
         setJdResult(data.data);
       }
     } catch {
-      // Fallback
-      setJdResult({
-        title: jobTitle,
-        summary: `توصيف وظيفي متكامل لمسمى ${jobTitle} في قسم ${department}.`,
-        responsibilities: [
-          'إدارة وتطوير المهام اليومية بكفاءة عالية',
-          'التنسيق مع فريق العمل والأقسام ذات الصلة',
-          'إعداد التقارير الدورية وتحليل مؤشرات الأداء',
-        ],
-        requiredSkills: [keySkills || 'مهارات التواصل والإدارة والتفكير التحليلي'],
-        kpis: ['نسبة إنجاز المهام 95%', 'مستوى جودة المخرجات والالتزام بالجدول الزمني'],
-        suggestedSalaryRange: '18,000 - 32,000 جنيه مصري',
-      });
+      // Keep instant draft smoothly
     } finally {
       setIsGeneratingJd(false);
     }

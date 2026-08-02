@@ -1,6 +1,6 @@
 import express from 'express';
 import path from 'path';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 
 const app = express();
@@ -29,70 +29,90 @@ function getGemini(): GoogleGenAI | null {
 
 // AI Endpoint 1: Generate Job Description
 app.post('/api/ai/job-description', async (req, res) => {
+  const { jobTitle = '', department = '', seniorityLevel = '', keySkills = '' } = req.body || {};
+
+  const buildFastJobDescription = () => {
+    const titleStr = jobTitle || 'مسمى وظيفي';
+    const deptStr = department || 'الموارد البشرية والتطوير';
+    const levelStr = seniorityLevel || 'متوسط الخبرة';
+    const skillsList = keySkills
+      ? keySkills.split(',').map((s: string) => s.trim()).filter(Boolean)
+      : ['حل المشكلات', 'إدارة الوقت والأولويات', 'التواصل الفعال'];
+
+    return {
+      title: titleStr,
+      summary: `توصيف وظيفي متكامل لمسمى ${titleStr} في قسم ${deptStr}. يختص هذا الدور بتنفيذ الخطط التشغيلية، ومتابعة الأداء اليومي، وتحقيق أعلى معايير الجودة والإنتاجية وفقاً لمتطلبات مستوى الخبرة (${levelStr}).`,
+      responsibilities: [
+        `التخطيط والتنفيذ المباشر لكافة الأعمال اليومية المتعلقة بـ ${titleStr}`,
+        `المشاركة في وضع الخطط التشغيلية وتطوير آليات العمل بـ ${deptStr}`,
+        'متابعة وتطبيق أعلى معايير الجودة والسلامة المهنية بالشركة',
+        'إعداد والرفع بالتقارير الدورية والإحصائيات للإدارة المباشرة',
+        'التنسيق والتكامل الفعال مع باقي الأقسام وفرق العمل ذات الصلة'
+      ],
+      requiredSkills: [
+        'القدرة على التحليل السريع واتخاذ القرارات التشغيلية',
+        'إتقان برامج الحاسوب والتطبيقات الحديثة ذات الصلة بالعمل',
+        'العمل الجماعي والقدرة على تحمل ضغوط العمل',
+        ...skillsList
+      ],
+      kpis: [
+        'نسبة إنجاز المهام المطلوبة في المواعيد المحددة (Target: 95%)',
+        'معدل انخفاض الأخطاء التشغيلية وجودة المخرجات (Target: < 2%)',
+        'معدل رضا الإدارة والعملاء الداخليين/الخارجيين (Target: 90%)',
+        'مدى الالتزام بسياسات ولائحة العمل والتعليمات المباشرة'
+      ],
+      suggestedSalaryRange: '15,000 - 28,000 جنيه مصري'
+    };
+  };
+
   try {
-    const { jobTitle, department, seniorityLevel, keySkills } = req.body;
     const ai = getGemini();
 
     if (!ai) {
-      // Clean fallback if process.env.GEMINI_API_KEY is not set yet
-      return res.json({
-        success: true,
-        data: {
-          title: jobTitle || 'مسمى وظيفي',
-          summary: `مؤهل وظيفي متكامل لمسمى ${jobTitle} في قسم ${department || 'الموارد البشرية'}. يتطلب خبرة ${seniorityLevel || 'متوسطة'}.`,
-          responsibilities: [
-            `إدارة ومتابعة المهام التشغيلية اليومية الخاصة بـ ${jobTitle}`,
-            'التنسيق مع فريق العمل والأقسام ذات الصلة لضمان سير العمل بدقة',
-            'إعداد التقارير الدورية ورفعها للإدارة المباشرة',
-            'المشاركة في تطوير إجراءات العمل وتحسين الإنتاجية'
-          ],
-          requiredSkills: [
-            'القدرة على حل المشكلات والتفكير التحليلي',
-            'إتقان استخدام أدوات وبرامج الحاسوب والأوفيس',
-            'مهارات التواصل الفعال والتفاوض',
-            ...(keySkills ? keySkills.split(',') : ['إدارة الوقت والأولويات'])
-          ],
-          kpis: [
-            'نسبة إنجاز المهام في الوقت المحدد (Target: 95%)',
-            'مستوى جودة المخرجات والتكلفة التشغيلية',
-            'معدل رضا فريق العمل والأقسام المتعاملة'
-          ],
-          suggestedSalaryRange: '12,000 - 25,000 جنيه مصري'
-        }
-      });
+      return res.json({ success: true, data: buildFastJobDescription() });
     }
 
-    const prompt = `أنت خبير موارد بشرية متخصص في إعداد التوصيف الوظيفي والهياكل التنظيمية باللغة العربية مع مراعاة أجور وسوق العمل المصري.
-يرجى إنتاج توصيف وظيفي احترافي ومفصل للمسمى الوظيفي التالي:
+    const prompt = `أنت خبير موارد بشرية متميز في إعداد التوصيف الوظيفي ومؤشرات الأداء KPI's باللغة العربية لسوق العمل المصري.
+يرجى إنتاج توصيف وظيفي موجز ومباشر ومؤشرات أداء دقيقة بصيغة JSON حصرية للمسمى:
 - المسمى الوظيفي: ${jobTitle}
-- القسم: ${department || 'غير محدد'}
+- القسم: ${department || 'عام'}
 - مستوى الخبرة: ${seniorityLevel || 'متوسط'}
-- مهارات إضافية مطلوبة: ${keySkills || 'مهارات قيادية وتنظيمية'}
+- المهارات: ${keySkills || 'مهارات مهنية متميزة'}
 
-اكتب الإجابة بصيغة JSON حصرية تحتوي الأقسام التالية باللغة العربية:
+أرجع JSON حصري بالهيكل التالي:
 {
-  "title": "اسم الوظيفة الكامل",
+  "title": "${jobTitle || 'اسم الوظيفة'}",
   "summary": "ملخص الوظيفة في 2-3 جمل",
   "responsibilities": ["مهام 1", "مهام 2", "مهام 3", "مهام 4", "مهام 5"],
   "requiredSkills": ["مهارة 1", "مهارة 2", "مهارة 3", "مهارة 4"],
-  "kpis": ["مؤشر أداء 1", "مؤشر أداء 2", "مؤشر أداء 3"],
-  "suggestedSalaryRange": "نطاق الراتب المقترح بالجنيه المصري (EGP) المطابق لمتوسط أجور وتكلفة المعيشة بسوق العمل في مصر (مثال: 15,000 - 28,000 جنيه مصري)"
+  "kpis": ["مؤشر أداء 1", "مؤشر أداء 2", "مؤشر أداء 3", "مؤشر أداء 4"],
+  "suggestedSalaryRange": "نطاق الراتب بالجنيه المصري EGP (مثال: 18,000 - 30,000 جنيه مصري)"
 }`;
 
-    const response = await ai.models.generateContent({
+    // Fast generation using gemini-3.6-flash with low thinking level & timeout
+    const fetchAiPromise = ai.models.generateContent({
       model: 'gemini-3.6-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
       },
     });
 
-    const text = response.text || '';
-    const parsed = JSON.parse(text);
-    return res.json({ success: true, data: parsed });
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000));
+
+    const result = await Promise.race([fetchAiPromise, timeoutPromise]);
+
+    if (result && result.text) {
+      const parsed = JSON.parse(result.text);
+      return res.json({ success: true, data: parsed });
+    }
+
+    // Fast fallback if timeout reached or empty result
+    return res.json({ success: true, data: buildFastJobDescription() });
   } catch (error: any) {
-    console.error('Error generating job description:', error);
-    return res.status(500).json({ success: false, error: error.message || 'فشل في توليد التوصيف الوظيفي' });
+    console.log('Fast fallback used for job description:', error?.message);
+    return res.json({ success: true, data: buildFastJobDescription() });
   }
 });
 
