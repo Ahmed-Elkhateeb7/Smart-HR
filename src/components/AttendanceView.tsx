@@ -92,6 +92,43 @@ export const formatEmployeeDisplayName = (
   return `موظف بصمة رقم (${numId})`;
 };
 
+export const fixAttendanceRecord = (rec: AttendanceRecord): AttendanceRecord => {
+  if (!rec) return rec;
+  let checkIn = rec.checkIn || '08:00';
+  let checkOut = rec.checkOut || '16:00';
+
+  // Fix inverted checkIn and checkOut (e.g. checkIn is 16:04 and checkOut is 08:23)
+  if (checkIn !== '-' && checkOut !== '-' && checkOut !== '' && checkIn > checkOut) {
+    const temp = checkIn;
+    checkIn = checkOut;
+    checkOut = temp;
+  }
+
+  // Recalculate delay if checkIn is a valid time
+  let delayMinutes = 0;
+  const [inH, inM] = checkIn.split(':').map(Number);
+  if (!isNaN(inH) && !isNaN(inM)) {
+    const checkInMinutes = inH * 60 + inM;
+    const targetMinutes = 8 * 60; // 08:00 AM
+    if (checkInMinutes > targetMinutes + 15) { // 15 mins grace period
+      delayMinutes = checkInMinutes - targetMinutes;
+    }
+  }
+
+  let status = rec.status;
+  if (status === 'present' || status === 'late') {
+    status = delayMinutes > 0 ? 'late' : 'present';
+  }
+
+  return {
+    ...rec,
+    checkIn,
+    checkOut,
+    delayMinutes,
+    status,
+  };
+};
+
 interface AttendanceViewProps {
   attendance: AttendanceRecord[];
   shifts: Shift[];
@@ -441,25 +478,38 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         localEmpMap.set(newEmpObj.id, newEmpObj);
       }
 
-      allPunches.sort();
-      inPunches.sort();
-      outPunches.sort();
+      const sortedPunches = Array.from(new Set(allPunches)).sort();
 
-      const earliestIn =
-        inPunches.length > 0 ? inPunches[0] : allPunches.length > 0 ? allPunches[0] : '08:00';
-      const latestOut =
-        outPunches.length > 0
-          ? outPunches[outPunches.length - 1]
-          : allPunches.length > 1
-          ? allPunches[allPunches.length - 1]
-          : '16:00';
+      let earliestIn = '08:00';
+      let latestOut = '16:00';
+
+      if (sortedPunches.length >= 2) {
+        earliestIn = sortedPunches[0];
+        latestOut = sortedPunches[sortedPunches.length - 1];
+      } else if (sortedPunches.length === 1) {
+        const pTime = sortedPunches[0];
+        const hour = parseInt(pTime.split(':')[0], 10);
+        if (hour < 13) {
+          earliestIn = pTime;
+          latestOut = '16:00';
+        } else {
+          earliestIn = '08:00';
+          latestOut = pTime;
+        }
+      }
+
+      if (earliestIn > latestOut) {
+        const temp = earliestIn;
+        earliestIn = latestOut;
+        latestOut = temp;
+      }
 
       let delayMinutes = 0;
       const [inH, inM] = earliestIn.split(':').map(Number);
       if (!isNaN(inH) && !isNaN(inM)) {
         const checkInMinutes = inH * 60 + inM;
-        const targetMinutes = 8 * 60;
-        if (checkInMinutes > targetMinutes + 15) {
+        const targetMinutes = 8 * 60; // 08:00 AM work start
+        if (checkInMinutes > targetMinutes + 15) { // 15 mins grace period
           delayMinutes = checkInMinutes - targetMinutes;
         }
       }
@@ -530,9 +580,10 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   const handleSaveRecord = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingRecord) {
-      onUpdateAttendanceRecord(editingRecord);
+      const fixed = fixAttendanceRecord(editingRecord);
+      onUpdateAttendanceRecord(fixed);
       setEditingRecord(null);
-      triggerNotification(`تم تحديث سجل حضور الموظف ${editingRecord.employeeName}`);
+      triggerNotification(`تم تحديث سجل حضور الموظف ${fixed.employeeName}`);
     }
   };
 
@@ -568,7 +619,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   const handleSaveBatchAttendance = (e: React.FormEvent) => {
     e.preventDefault();
     batchAttendanceData.forEach((rec) => {
-      onUpdateAttendanceRecord(rec);
+      onUpdateAttendanceRecord(fixAttendanceRecord(rec));
     });
     setShowBatchAttendanceEditModal(false);
     triggerNotification(`تم تحديث وحفظ كافة التعديلات على جدول الحضور اليومي بنجاح!`);
@@ -601,8 +652,8 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   };
 
   const displayedAttendance = useMemo(() => {
-    if (!selectedDate) return attendance;
-    return attendance.filter((a) => a.date === selectedDate);
+    const list = !selectedDate ? attendance : attendance.filter((a) => a.date === selectedDate);
+    return list.map(fixAttendanceRecord);
   }, [attendance, selectedDate]);
 
   const totalDelaysMinutes = displayedAttendance.reduce((sum, a) => sum + (a.delayMinutes || 0), 0);
@@ -752,7 +803,6 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 <tr>
                   <th className="p-3.5">اسم الموظف</th>
                   <th className="p-3.5">القسم</th>
-                  <th className="p-3.5">الوردية</th>
                   <th className="p-3.5">وقت الحضور</th>
                   <th className="p-3.5">وقت الانصراف</th>
                   <th className="p-3.5">التأخير (دقائق)</th>
@@ -771,7 +821,6 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                           {formatEmployeeDisplayName(rec.employeeName, rec.employeeId, employees)}
                         </td>
                         <td className="p-3.5 text-slate-500">{rec.department}</td>
-                        <td className="p-3.5 text-slate-600 dark:text-slate-300">{rec.shiftName}</td>
                         <td className="p-3.5 font-bold text-emerald-600">{rec.checkIn}</td>
                         <td className="p-3.5 font-bold text-blue-600">{rec.checkOut}</td>
                         <td className="p-3.5 font-extrabold text-amber-600">
@@ -797,7 +846,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                   })
                 ) : (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-500 dark:text-slate-400">
+                    <td colSpan={7} className="p-8 text-center text-slate-500 dark:text-slate-400">
                       <div className="flex flex-col items-center justify-center space-y-3">
                         <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
                           <Clock className="w-6 h-6" />
@@ -1459,7 +1508,6 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 <thead className="bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 font-bold sticky top-0 border-b border-slate-200 dark:border-slate-700">
                   <tr>
                     <th className="p-3">اسم الموظف</th>
-                    <th className="p-3">الوردية</th>
                     <th className="p-3">حالة الحضور</th>
                     <th className="p-3">وقت الحضور</th>
                     <th className="p-3">وقت الانصراف</th>
@@ -1473,7 +1521,6 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                         {formatEmployeeDisplayName(rec.employeeName, rec.employeeId, employees)}
                         <div className="text-[10px] text-slate-400 font-normal">{rec.department}</div>
                       </td>
-                      <td className="p-3 text-slate-500">{rec.shiftName}</td>
                       <td className="p-3">
                         <select
                           value={rec.status}
