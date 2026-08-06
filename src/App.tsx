@@ -12,6 +12,7 @@ import { ReportsView } from './components/ReportsView';
 import { SettingsView } from './components/SettingsView';
 import { DatabaseView } from './components/DatabaseView';
 import { DocumentsView } from './components/DocumentsView';
+import { TrainingView } from './components/TrainingView';
 import { LoginView } from './components/LoginView';
 
 import {
@@ -23,7 +24,9 @@ import {
   initialSystemAlerts,
   initialDepartments,
   initialShifts,
-  initialCompanySettings
+  initialCompanySettings,
+  initialTrainingCourses,
+  initialTrainingNominations
 } from './data/initialData';
 
 import {
@@ -36,7 +39,11 @@ import {
   Department,
   Shift,
   TabType,
-  DocumentItem
+  DocumentItem,
+  CompanySettings,
+  KpiSettings,
+  TrainingCourse,
+  TrainingNomination
 } from './types';
 
 import {
@@ -49,7 +56,12 @@ import {
   saveAlerts,
   saveShifts,
   saveDocuments,
-  saveCurrencySymbol
+  saveCurrencySymbol,
+  saveCompanySettings,
+  saveDepartments,
+  saveKpiSettings,
+  saveTrainingCourses,
+  saveTrainingNominations
 } from './utils/storage';
 
 export default function App() {
@@ -64,15 +76,19 @@ export default function App() {
   const [initialLoaded] = useState(() => loadAllState());
 
   const [currencySymbol, setCurrencySymbol] = useState(initialLoaded.currencySymbol);
+  const [companySettings, setCompanySettings] = useState<CompanySettings>(initialLoaded.companySettings || initialCompanySettings);
   const [employees, setEmployees] = useState<Employee[]>(initialLoaded.employees);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(initialLoaded.attendanceRecords);
   const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>(initialLoaded.payrollRecords);
   const [loans, setLoans] = useState<Loan[]>(initialLoaded.loans);
   const [assets, setAssets] = useState<Asset[]>(initialLoaded.assets);
   const [alerts, setAlerts] = useState<SystemAlert[]>(initialLoaded.alerts);
-  const [departments] = useState<Department[]>(initialDepartments);
+  const [departments, setDepartments] = useState<Department[]>(initialLoaded.departments || initialDepartments);
+  const [kpiSettings, setKpiSettings] = useState<KpiSettings | null>(initialLoaded.kpiSettings || null);
   const [shifts, setShifts] = useState<Shift[]>(initialLoaded.shifts);
   const [documents, setDocuments] = useState<DocumentItem[]>(initialLoaded.documents);
+  const [trainingCourses, setTrainingCourses] = useState<TrainingCourse[]>(initialLoaded.trainingCourses || initialTrainingCourses);
+  const [trainingNominations, setTrainingNominations] = useState<TrainingNomination[]>(initialLoaded.trainingNominations || initialTrainingNominations);
 
   // Auto-persist state changes
   useEffect(() => { saveEmployees(employees); }, [employees]);
@@ -83,7 +99,12 @@ export default function App() {
   useEffect(() => { saveAlerts(alerts); }, [alerts]);
   useEffect(() => { saveShifts(shifts); }, [shifts]);
   useEffect(() => { saveDocuments(documents); }, [documents]);
+  useEffect(() => { saveTrainingCourses(trainingCourses); }, [trainingCourses]);
+  useEffect(() => { saveTrainingNominations(trainingNominations); }, [trainingNominations]);
   useEffect(() => { saveCurrencySymbol(currencySymbol); }, [currencySymbol]);
+  useEffect(() => { saveCompanySettings(companySettings); }, [companySettings]);
+  useEffect(() => { saveDepartments(departments); }, [departments]);
+  useEffect(() => { if (kpiSettings) saveKpiSettings(kpiSettings); }, [kpiSettings]);
 
   const handleRestoreData = (restored: {
     employees: Employee[];
@@ -95,6 +116,8 @@ export default function App() {
     shifts: Shift[];
     documents: DocumentItem[];
     currencySymbol: string;
+    trainingCourses?: TrainingCourse[];
+    trainingNominations?: TrainingNomination[];
   }) => {
     setEmployees(restored.employees);
     setAttendanceRecords(restored.attendanceRecords);
@@ -105,6 +128,8 @@ export default function App() {
     setShifts(restored.shifts);
     setDocuments(restored.documents);
     setCurrencySymbol(restored.currencySymbol);
+    if (restored.trainingCourses) setTrainingCourses(restored.trainingCourses);
+    if (restored.trainingNominations) setTrainingNominations(restored.trainingNominations);
   };
 
   const handleClearData = () => {
@@ -115,6 +140,8 @@ export default function App() {
     setAssets([]);
     setAlerts([]);
     setDocuments([]);
+    setTrainingCourses([]);
+    setTrainingNominations([]);
   };
 
   const handleAddDocument = (doc: DocumentItem) => {
@@ -387,6 +414,14 @@ export default function App() {
     });
   };
 
+  const handleClearAttendance = () => {
+    setAttendanceRecords([]);
+  };
+
+  const handleBatchUpdateAttendance = (newRecords: AttendanceRecord[]) => {
+    setAttendanceRecords(newRecords);
+  };
+
   // Add Shift
   const handleAddShift = (shift: Shift) => {
     setShifts((prev) => [...prev, shift]);
@@ -397,6 +432,10 @@ export default function App() {
     setShifts((prev) =>
       prev.map((s) => (s.id === updatedShift.id ? updatedShift : s))
     );
+  };
+
+  const handleResetShifts = () => {
+    setShifts(initialShifts);
   };
 
   // Approve / Unlock Payroll
@@ -534,6 +573,40 @@ export default function App() {
     );
   };
 
+  // Training Handlers
+  const handleAddTrainingCourse = (course: TrainingCourse) => {
+    setTrainingCourses((prev) => [course, ...prev]);
+  };
+
+  const handleUpdateTrainingCourse = (updatedCourse: TrainingCourse) => {
+    setTrainingCourses((prev) =>
+      prev.map((c) => (c.id === updatedCourse.id ? updatedCourse : c))
+    );
+  };
+
+  const handleDeleteTrainingCourse = (courseId: string) => {
+    if (window.confirm('هل أنت متأكد من رغبتك في حذف هذه الدورة التدريبية؟')) {
+      setTrainingCourses((prev) => prev.filter((c) => c.id !== courseId));
+      setTrainingNominations((prev) => prev.filter((n) => n.courseId !== courseId));
+    }
+  };
+
+  const handleAddTrainingNomination = (nomination: TrainingNomination) => {
+    setTrainingNominations((prev) => [nomination, ...prev]);
+  };
+
+  const handleUpdateTrainingNomination = (updatedNom: TrainingNomination) => {
+    setTrainingNominations((prev) =>
+      prev.map((n) => (n.id === updatedNom.id ? updatedNom : n))
+    );
+  };
+
+  const handleDeleteTrainingNomination = (nomId: string) => {
+    if (window.confirm('هل أنت متأكد من رغبتك في حذف هذا الترشيح؟')) {
+      setTrainingNominations((prev) => prev.filter((n) => n.id !== nomId));
+    }
+  };
+
   const handleLogin = (password: string) => {
     if (password === '1001') {
       localStorage.setItem('isAuthenticated', 'true');
@@ -596,6 +669,14 @@ export default function App() {
           setSearchTerm={setSearchTerm}
           todayAttendanceCount={attendanceRecords.filter((a) => a.status === 'present' || a.status === 'late').length}
           totalEmployeesCount={employees.length}
+          employees={employees}
+          departments={departments}
+          assets={assets}
+          loans={loans}
+          documents={documents}
+          payrollRecords={payrollRecords}
+          attendanceRecords={attendanceRecords}
+          currencySymbol={currencySymbol}
         />
 
         {/* View Switcher */}
@@ -667,11 +748,17 @@ export default function App() {
               attendance={attendanceRecords}
               shifts={shifts}
               employees={employees}
+              companySettings={companySettings}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
               onUpdateAttendanceRecord={handleUpdateAttendanceRecord}
               onAddAttendanceRecord={handleAddAttendanceRecord}
+              onBatchUpdateAttendance={handleBatchUpdateAttendance}
+              onClearAttendance={handleClearAttendance}
               onAddEmployee={handleAddEmployee}
               onAddShift={handleAddShift}
               onUpdateShift={handleUpdateShift}
+              onResetShifts={handleResetShifts}
             />
           )}
 
@@ -680,6 +767,8 @@ export default function App() {
               payrollRecords={payrollRecords}
               employees={employees}
               departments={departments}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
               onApprovePayroll={handleApprovePayroll}
               onUpdatePayrollRecord={handleUpdatePayrollRecord}
               onGeneratePayroll={handleGeneratePayroll}
@@ -710,9 +799,35 @@ export default function App() {
           {activeTab === 'reports' && (
             <ReportsView
               departments={departments}
+              onUpdateDepartments={setDepartments}
               payroll={payrollRecords}
               employees={employees}
               currencySymbol={currencySymbol}
+              kpiSettings={kpiSettings}
+              onUpdateKpiSettings={setKpiSettings}
+              onNavigateTab={(tab, filter) => {
+                if (filter) setSearchTerm(filter);
+                setActiveTab(tab);
+              }}
+            />
+          )}
+
+          {activeTab === 'training' && (
+            <TrainingView
+              courses={trainingCourses}
+              nominations={trainingNominations}
+              employees={employees}
+              departments={departments}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              onAddCourse={handleAddTrainingCourse}
+              onUpdateCourse={handleUpdateTrainingCourse}
+              onDeleteCourse={handleDeleteTrainingCourse}
+              onAddNomination={handleAddTrainingNomination}
+              onUpdateNomination={handleUpdateTrainingNomination}
+              onDeleteNomination={handleDeleteTrainingNomination}
+              currencySymbol={currencySymbol}
+              companySettings={companySettings}
             />
           )}
 
@@ -722,6 +837,8 @@ export default function App() {
               setDarkMode={setDarkMode}
               currencySymbol={currencySymbol}
               setCurrencySymbol={setCurrencySymbol}
+              companySettings={companySettings}
+              onUpdateCompanySettings={setCompanySettings}
             />
           )}
 
@@ -735,6 +852,8 @@ export default function App() {
               alerts={alerts}
               shifts={shifts}
               documents={documents}
+              trainingCourses={trainingCourses}
+              trainingNominations={trainingNominations}
               currencySymbol={currencySymbol}
               onRestoreData={handleRestoreData}
               onClearData={handleClearData}

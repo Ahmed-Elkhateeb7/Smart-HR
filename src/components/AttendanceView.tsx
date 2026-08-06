@@ -20,9 +20,24 @@ import {
   Save,
   FileText,
   FileCode,
-  Layers
+  Layers,
+  Trash2,
+  Wrench,
+  Zap,
+  CheckCheck,
+  Filter,
+  ArrowRightLeft
 } from 'lucide-react';
-import { AttendanceRecord, Shift, AttendanceStatus, Employee } from '../types';
+import * as XLSX from 'xlsx';
+import { AttendanceRecord, Shift, AttendanceStatus, Employee, CompanySettings } from '../types';
+
+export const getTodayDateString = (): string => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 export const formatEmployeeDisplayName = (
   name?: string,
@@ -92,32 +107,147 @@ export const formatEmployeeDisplayName = (
   return `موظف بصمة رقم (${numId})`;
 };
 
-export const fixAttendanceRecord = (rec: AttendanceRecord): AttendanceRecord => {
+export const fixAttendanceRecord = (
+  rec: AttendanceRecord,
+  shiftsList?: Shift[]
+): AttendanceRecord => {
   if (!rec) return rec;
   let checkIn = rec.checkIn || '08:00';
   let checkOut = rec.checkOut || '16:00';
 
-  // Fix inverted checkIn and checkOut (e.g. checkIn is 16:04 and checkOut is 08:23)
-  if (checkIn !== '-' && checkOut !== '-' && checkOut !== '' && checkIn > checkOut) {
-    const temp = checkIn;
-    checkIn = checkOut;
-    checkOut = temp;
+  const getDayNameFromDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    const dateObj = new Date(dateStr);
+    if (isNaN(dateObj.getTime())) return '';
+    const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+    return days[dateObj.getDay()];
+  };
+
+  const getMinutes = (timeStr: string) => {
+    if (!timeStr || timeStr === '-') return 0;
+    const [h, m] = timeStr.split(':').map(Number);
+    if (isNaN(h) || isNaN(m)) return 0;
+    return h * 60 + m;
+  };
+
+  const getDistance = (t1: string, t2: string) => {
+    const m1 = getMinutes(t1);
+    const m2 = getMinutes(t2);
+    const diff = Math.abs(m1 - m2);
+    return Math.min(diff, 24 * 60 - diff);
+  };
+
+  // Filter shifts by active day if date is present
+  let validShifts = shiftsList || [];
+  if (validShifts.length > 0 && rec.date) {
+    const dayName = getDayNameFromDate(rec.date);
+    const dayFiltered = validShifts.filter(s => s.activeDays && s.activeDays.includes(dayName));
+    if (dayFiltered.length > 0) {
+      validShifts = dayFiltered;
+    }
+  }
+
+  // Determine shift automatically based on closest checkIn time
+  let shiftStartTime = '08:00';
+  let graceMinutes = 15;
+  let assignedShiftName = rec.shiftName || 'الوردية الصباحية الأساسية';
+  let closestShift: Shift | null = null;
+
+  if (validShifts.length > 0 && checkIn !== '-') {
+    closestShift = validShifts[0];
+    let minDistance = Infinity;
+
+    for (const shift of validShifts) {
+      if (shift.startTime) {
+        const dist = getDistance(checkIn, shift.startTime);
+        // Add a slight preference for shifts that match the record's current shift if distance is similar
+        const isCurrentShift = (shift.name === rec.shiftName || shift.id === rec.shiftName);
+        const adjustedDist = isCurrentShift ? dist - 30 : dist; // 30 minutes bias
+        
+        if (adjustedDist < minDistance) {
+          minDistance = adjustedDist;
+          closestShift = shift;
+        }
+      }
+    }
+
+    if (closestShift) {
+      shiftStartTime = closestShift.startTime || '08:00';
+      assignedShiftName = closestShift.name;
+      if (closestShift.gracePeriodMinutes !== undefined && !isNaN(Number(closestShift.gracePeriodMinutes))) {
+        graceMinutes = Number(closestShift.gracePeriodMinutes);
+      }
+    }
+  } else if (validShifts.length > 0) {
+     // If no checkIn time, fallback to original logic
+     const matchedShift = validShifts.find(
+      (s) => s.name === rec.shiftName || s.id === rec.shiftName
+    ) || validShifts[0];
+
+    if (matchedShift) {
+      closestShift = matchedShift;
+      shiftStartTime = matchedShift.startTime || '08:00';
+      assignedShiftName = matchedShift.name;
+      if (matchedShift.gracePeriodMinutes !== undefined && !isNaN(Number(matchedShift.gracePeriodMinutes))) {
+        graceMinutes = Number(matchedShift.gracePeriodMinutes);
+      }
+    }
+  }
+
+  // ONLY AFTER FINDING THE SHIFT, check if checkIn and checkOut are inverted!
+  // If we swapped them blindly before, a night shift checkIn (23:00) and checkOut (08:00) 
+  // would be swapped into Morning Shift.
+  if (closestShift && checkIn !== '-' && checkOut !== '-' && checkOut !== '') {
+    if (checkIn > checkOut) {
+      const distNoSwap = getDistance(checkIn, shiftStartTime);
+      const distSwap = getDistance(checkOut, shiftStartTime);
+      // If swapping them makes it significantly closer to shift start, it was likely inverted!
+      if (distSwap < distNoSwap - 120) { 
+        const temp = checkIn;
+        checkIn = checkOut;
+        checkOut = temp;
+      }
+    }
   }
 
   // Recalculate delay if checkIn is a valid time
   let delayMinutes = 0;
-  const [inH, inM] = checkIn.split(':').map(Number);
-  if (!isNaN(inH) && !isNaN(inM)) {
-    const checkInMinutes = inH * 60 + inM;
-    const targetMinutes = 8 * 60; // 08:00 AM
-    if (checkInMinutes > targetMinutes + 15) { // 15 mins grace period
-      delayMinutes = checkInMinutes - targetMinutes;
+  let earlyLeaveMinutes = rec.earlyLeaveMinutes || 0;
+  
+  if (checkIn !== '-') {
+    const checkInMins = getMinutes(checkIn);
+    const targetMins = getMinutes(shiftStartTime);
+    
+    // Calculate delay considering 24h wrap-around
+    let diff = checkInMins - targetMins;
+    if (diff < -12 * 60) diff += 24 * 60; // Check-in is just after midnight, target is before
+    if (diff > 12 * 60) diff -= 24 * 60;  // Check-in is before midnight, target is after
+    
+    if (diff > graceMinutes) {
+      // Delay is counted fully from the start time once grace period is exceeded
+      delayMinutes = diff;
+    }
+  }
+
+  // Calculate early leave if checkOut is a valid time
+  if (checkOut !== '-' && closestShift && closestShift.endTime) {
+    const checkOutMins = getMinutes(checkOut);
+    const endTargetMins = getMinutes(closestShift.endTime);
+
+    let diff = endTargetMins - checkOutMins;
+    if (diff < -12 * 60) diff += 24 * 60;
+    if (diff > 12 * 60) diff -= 24 * 60;
+
+    if (diff > 0) {
+      earlyLeaveMinutes = diff;
+    } else {
+      earlyLeaveMinutes = 0;
     }
   }
 
   let status = rec.status;
-  if (status === 'present' || status === 'late') {
-    status = delayMinutes > 0 ? 'late' : 'present';
+  if (status === 'present' || status === 'late' || !status) {
+    status = (delayMinutes > 0) ? 'late' : 'present';
   }
 
   return {
@@ -125,7 +255,9 @@ export const fixAttendanceRecord = (rec: AttendanceRecord): AttendanceRecord => 
     checkIn,
     checkOut,
     delayMinutes,
+    earlyLeaveMinutes,
     status,
+    shiftName: assignedShiftName
   };
 };
 
@@ -133,25 +265,38 @@ interface AttendanceViewProps {
   attendance: AttendanceRecord[];
   shifts: Shift[];
   employees?: Employee[];
+  companySettings?: CompanySettings;
+  searchTerm?: string;
+  setSearchTerm?: (term: string) => void;
   onUpdateAttendanceRecord: (record: AttendanceRecord) => void;
   onAddAttendanceRecord?: (record: AttendanceRecord) => void;
+  onBatchUpdateAttendance?: (records: AttendanceRecord[]) => void;
+  onClearAttendance?: () => void;
   onAddEmployee?: (employee: Employee) => void;
   onAddShift: (shift: Shift) => void;
   onUpdateShift?: (shift: Shift) => void;
+  onResetShifts?: () => void;
 }
 
 export const AttendanceView: React.FC<AttendanceViewProps> = ({
   attendance,
   shifts,
   employees,
+  companySettings,
+  searchTerm = '',
+  setSearchTerm,
   onUpdateAttendanceRecord,
   onAddAttendanceRecord,
+  onBatchUpdateAttendance,
+  onClearAttendance,
   onAddEmployee,
   onAddShift,
   onUpdateShift,
+  onResetShifts,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'daily' | 'shifts'>('daily');
-  const [selectedDate, setSelectedDate] = useState<string>('2026-07-26');
+  const [selectedDate, setSelectedDate] = useState<string>(() => getTodayDateString());
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
   const [editingRecord, setEditingRecord] = useState<AttendanceRecord | null>(null);
   const [showShiftModal, setShowShiftModal] = useState(false);
 
@@ -159,6 +304,12 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   const [editingShift, setEditingShift] = useState<Shift | null>(null);
   const [showBatchAttendanceEditModal, setShowBatchAttendanceEditModal] = useState(false);
   const [batchAttendanceData, setBatchAttendanceData] = useState<AttendanceRecord[]>([]);
+
+  // Missing Checkouts Resolver State
+  const [showMissingCheckoutsModal, setShowMissingCheckoutsModal] = useState(false);
+  const [filterOnlyMissingCheckouts, setFilterOnlyMissingCheckouts] = useState(false);
+  const [missingCheckoutRows, setMissingCheckoutRows] = useState<AttendanceRecord[]>([]);
+  const [universalCheckoutTime, setUniversalCheckoutTime] = useState('16:00');
 
   // Modals & Action states
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -169,6 +320,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
   // DAT File Import Summary Modal State
   const [showDatImportModal, setShowDatImportModal] = useState(false);
+  const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const [datImportSummary, setDatImportSummary] = useState<{
     filesCount: number;
     fileNames: string[];
@@ -208,15 +360,12 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
     const fileNames = filesArray.map((f) => f.name);
 
     let totalLogsParsed = 0;
-    const punchMap = new Map<
+    const userPunchesMap = new Map<
       string,
       {
-        inPunches: string[];
-        outPunches: string[];
-        allPunches: string[];
+        punches: { dt: Date; dateStr: string; timeStr: string }[];
         rawId: string;
         extractedName?: string;
-        date: string;
       }
     >();
 
@@ -301,7 +450,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           }
 
           if (!foundDate) {
-            foundDate = selectedDate || '2026-07-26';
+            foundDate = selectedDate || getTodayDateString();
           }
 
           if (!foundTime) continue;
@@ -311,36 +460,21 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           const hasLetters = /[\u0600-\u06FFa-zA-Z]/.test(rawExtracted);
           const extractedName = hasLetters && rawExtracted.length >= 2 ? rawExtracted : undefined;
 
-          let isCheckOut = false;
-          if (isExitFile) {
-            isCheckOut = true;
-          } else if (isEntryFile) {
-            isCheckOut = false;
-          } else {
-            const hour = parseInt(foundTime.split(':')[0], 10);
-            isCheckOut = hour >= 13;
-          }
-
-          const mapKey = `${rawId}_${foundDate}`;
-          if (!punchMap.has(mapKey)) {
-            punchMap.set(mapKey, {
-              inPunches: [],
-              outPunches: [],
-              allPunches: [],
+          if (!userPunchesMap.has(rawId)) {
+            userPunchesMap.set(rawId, {
+              punches: [],
               rawId,
               extractedName,
-              date: foundDate,
             });
           }
-          const rec = punchMap.get(mapKey)!;
+          const rec = userPunchesMap.get(rawId)!;
           if (extractedName && !rec.extractedName) {
             rec.extractedName = extractedName;
           }
-          rec.allPunches.push(foundTime);
-          if (isCheckOut) {
-            rec.outPunches.push(foundTime);
-          } else {
-            rec.inPunches.push(foundTime);
+          
+          const punchDt = new Date(`${foundDate}T${foundTime}:00`);
+          if (!isNaN(punchDt.getTime())) {
+            rec.punches.push({ dt: punchDt, dateStr: foundDate, timeStr: foundTime });
           }
         }
       } catch (err) {
@@ -350,7 +484,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
     if (totalLogsParsed === 0 && filesArray.length > 0) {
       totalLogsParsed = 16;
-      const defaultDate = selectedDate || '2026-07-26';
+      const defaultDate = selectedDate || getTodayDateString();
       const sampleEmps = [
         { id: '101', code: '101', name: 'أحمد محمود العلي' },
         { id: '102', code: '102', name: 'سارة عبد الله الشمري' },
@@ -358,14 +492,13 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         { id: '104', code: '104', name: 'خالد إبراهيم المنصور' },
       ];
       sampleEmps.forEach((emp, idx) => {
-        const mapKey = `${emp.code}_${defaultDate}`;
-        punchMap.set(mapKey, {
-          inPunches: [`08:0${idx + 2}`],
-          outPunches: [`16:1${idx + 5}`],
-          allPunches: [`08:0${idx + 2}`, `16:1${idx + 5}`],
+        userPunchesMap.set(emp.code, {
+          punches: [
+            { dt: new Date(`${defaultDate}T08:0${idx + 2}:00`), dateStr: defaultDate, timeStr: `08:0${idx + 2}` },
+            { dt: new Date(`${defaultDate}T16:1${idx + 5}:00`), dateStr: defaultDate, timeStr: `16:1${idx + 5}` }
+          ],
           rawId: emp.code,
           extractedName: emp.name,
-          date: defaultDate,
         });
       });
     }
@@ -382,7 +515,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
     const localEmpMap = new Map<string, Employee>();
 
-    punchMap.forEach(({ inPunches, outPunches, allPunches, rawId, extractedName, date }) => {
+    userPunchesMap.forEach(({ punches, rawId, extractedName }) => {
       const cleanRawId = (rawId || '').replace(/[\uFFFD\?]/g, '').trim();
       const rawNum = parseInt(cleanRawId.replace(/\D/g, ''), 10);
 
@@ -453,7 +586,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           iqamaOrIdNumber: cleanRawId,
           phone: '',
           email: '',
-          joinDate: date || new Date().toISOString().split('T')[0],
+          joinDate: (punches.length > 0 ? punches[0].dateStr : '') || new Date().toISOString().split('T')[0],
           iqamaExpiryDate: '',
           contractType: '',
           contractExpiryDate: '',
@@ -478,73 +611,152 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         localEmpMap.set(newEmpObj.id, newEmpObj);
       }
 
-      const sortedPunches = Array.from(new Set(allPunches)).sort();
+      if (punches.length === 0) return;
 
-      let earliestIn = '08:00';
-      let latestOut = '16:00';
+      // Sort punches chronologically
+      punches.sort((a, b) => a.dt.getTime() - b.dt.getTime());
 
-      if (sortedPunches.length >= 2) {
-        earliestIn = sortedPunches[0];
-        latestOut = sortedPunches[sortedPunches.length - 1];
-      } else if (sortedPunches.length === 1) {
-        const pTime = sortedPunches[0];
-        const hour = parseInt(pTime.split(':')[0], 10);
-        if (hour < 13) {
-          earliestIn = pTime;
-          latestOut = '16:00';
+      // Debounce: ignore rapid consecutive punches for the same employee within 3 minutes
+      const debouncedPunches: { dt: Date; dateStr: string; timeStr: string }[] = [];
+      for (const p of punches) {
+        if (debouncedPunches.length === 0) {
+          debouncedPunches.push(p);
         } else {
-          earliestIn = '08:00';
-          latestOut = pTime;
+          const last = debouncedPunches[debouncedPunches.length - 1];
+          const diffMinutes = (p.dt.getTime() - last.dt.getTime()) / (1000 * 60);
+          if (diffMinutes >= 3) {
+            debouncedPunches.push(p);
+          }
         }
       }
 
-      if (earliestIn > latestOut) {
-        const temp = earliestIn;
-        earliestIn = latestOut;
-        latestOut = temp;
+      // Group punches by calendar date
+      const dateMap = new Map<string, { dt: Date; dateStr: string; timeStr: string }[]>();
+      for (const p of debouncedPunches) {
+        if (!dateMap.has(p.dateStr)) {
+          dateMap.set(p.dateStr, []);
+        }
+        dateMap.get(p.dateStr)!.push(p);
       }
 
-      let delayMinutes = 0;
-      const [inH, inM] = earliestIn.split(':').map(Number);
-      if (!isNaN(inH) && !isNaN(inM)) {
-        const checkInMinutes = inH * 60 + inM;
-        const targetMinutes = 8 * 60; // 08:00 AM work start
-        if (checkInMinutes > targetMinutes + 15) { // 15 mins grace period
-          delayMinutes = checkInMinutes - targetMinutes;
+      const generatedRecords: AttendanceRecord[] = [];
+      const sortedDates = Array.from(dateMap.keys()).sort();
+
+      for (let dIdx = 0; dIdx < sortedDates.length; dIdx++) {
+        const dStr = sortedDates[dIdx];
+        const dayPunches = dateMap.get(dStr)!;
+
+        // If day has multiple punches:
+        if (dayPunches.length >= 2) {
+          const firstPunch = dayPunches[0];
+          const lastPunch = dayPunches[dayPunches.length - 1];
+          const diffHours = (lastPunch.dt.getTime() - firstPunch.dt.getTime()) / (1000 * 60 * 60);
+
+          const checkIn = firstPunch.timeStr;
+          let checkOut = '-';
+
+          // If the last punch is at least 20 minutes after checkIn, pair as checkOut
+          if (diffHours >= 0.33) {
+            checkOut = lastPunch.timeStr;
+          }
+
+          // Determine best shift matching check-in
+          let bestShiftName = 'الوردية الصباحية';
+          if (shifts && shifts.length > 0) {
+            let bestDiff = Infinity;
+            for (const s of shifts) {
+              const [sH, sM] = s.startTime.split(':').map(Number);
+              const [iH, iM] = checkIn.split(':').map(Number);
+              const diff = Math.abs((sH * 60 + sM) - (iH * 60 + iM));
+              if (diff < bestDiff) {
+                bestDiff = diff;
+                bestShiftName = s.name;
+              }
+            }
+          }
+
+          generatedRecords.push({
+            id: `att-dat-${matchedEmp.id}-${dStr}`,
+            employeeId: matchedEmp.id,
+            employeeName: finalName || matchedEmp.name,
+            department: matchedEmp.department || 'عام',
+            date: dStr,
+            checkIn,
+            checkOut,
+            delayMinutes: 0,
+            earlyLeaveMinutes: 0,
+            status: 'present',
+            shiftName: bestShiftName,
+            notes: `تم استيراد حركات البصمة (${fileNames.join(', ')})`,
+          });
+        } else if (dayPunches.length === 1) {
+          const singlePunch = dayPunches[0];
+          const singleHour = singlePunch.dt.getHours();
+          let pairedWithPreviousNight = false;
+
+          // Check if single morning punch belongs to yesterday's night shift (e.g. night shift out)
+          if (singleHour < 11 && generatedRecords.length > 0) {
+            const prevRec = generatedRecords[generatedRecords.length - 1];
+            if (prevRec.checkOut === '-' && prevRec.checkIn) {
+              const prevInHour = parseInt(prevRec.checkIn.split(':')[0], 10);
+              if (prevInHour >= 18 || prevInHour <= 2) {
+                prevRec.checkOut = singlePunch.timeStr;
+                pairedWithPreviousNight = true;
+              }
+            }
+          }
+
+          if (!pairedWithPreviousNight) {
+            let bestShiftName = 'الوردية الصباحية';
+            if (shifts && shifts.length > 0) {
+              let bestDiff = Infinity;
+              for (const s of shifts) {
+                const [sH, sM] = s.startTime.split(':').map(Number);
+                const [iH, iM] = singlePunch.timeStr.split(':').map(Number);
+                const diff = Math.abs((sH * 60 + sM) - (iH * 60 + iM));
+                if (diff < bestDiff) {
+                  bestDiff = diff;
+                  bestShiftName = s.name;
+                }
+              }
+            }
+
+            generatedRecords.push({
+              id: `att-dat-${matchedEmp.id}-${dStr}`,
+              employeeId: matchedEmp.id,
+              employeeName: finalName || matchedEmp.name,
+              department: matchedEmp.department || 'عام',
+              date: dStr,
+              checkIn: singlePunch.timeStr,
+              checkOut: '-',
+              delayMinutes: 0,
+              earlyLeaveMinutes: 0,
+              status: 'present',
+              shiftName: bestShiftName,
+              notes: `تم استيراد حركات البصمة (${fileNames.join(', ')})`,
+            });
+          }
         }
       }
 
-      const status: AttendanceStatus = delayMinutes > 0 ? 'late' : 'present';
+      generatedRecords.forEach((baseRecord) => {
+        const updatedRecord = fixAttendanceRecord(baseRecord, shifts);
 
-      const updatedRecord: AttendanceRecord = {
-        id: `att-dat-${matchedEmp.id}-${date}`,
-        employeeId: matchedEmp.id,
-        employeeName: finalName || matchedEmp.name,
-        department: matchedEmp.department || 'عام',
-        date,
-        checkIn: earliestIn,
-        checkOut: latestOut,
-        delayMinutes,
-        earlyLeaveMinutes: 0,
-        status,
-        shiftName: 'وردية الصباح الرئيسية',
-        notes: `تم استيراد كافة حركات البصمة لملف .dat (${fileNames.join(', ')})`,
-      };
+        if (onAddAttendanceRecord) {
+          onAddAttendanceRecord(updatedRecord);
+        } else {
+          onUpdateAttendanceRecord(updatedRecord);
+        }
 
-      if (onAddAttendanceRecord) {
-        onAddAttendanceRecord(updatedRecord);
-      } else {
-        onUpdateAttendanceRecord(updatedRecord);
-      }
-
-      matchedCount++;
-      updatedDatesSet.add(date);
-      recordsSummaryList.push({
-        employeeName: finalName || matchedEmp.name,
-        date,
-        checkIn: earliestIn,
-        checkOut: latestOut,
-        status: status === 'late' ? 'متأخر' : 'حاضر (مكتمل)',
+        matchedCount++;
+        updatedDatesSet.add(baseRecord.date);
+        recordsSummaryList.push({
+          employeeName: baseRecord.employeeName,
+          date: baseRecord.date,
+          checkIn: baseRecord.checkIn,
+          checkOut: baseRecord.checkOut,
+          status: updatedRecord.status === 'late' ? 'متأخر' : 'حاضر (مكتمل)',
+        });
       });
     });
 
@@ -563,12 +775,180 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
     setShowDatImportModal(true);
 
     triggerNotification(
-      `تم استيراد كافة حركات البصمة (.dat) بنجاح (${fileNames.join(' و ')}) وعرض ${matchedCount} موظفاً في الجدول!`
+      `تم استيراد كافة حركات البصمة (.dat) بنجاح (${fileNames.join(' و ')}) ومعالجة ${matchedCount} سجلاً في الجدول!`
     );
 
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  const handleOpenMissingCheckoutsModal = () => {
+    const missing = attendance.filter(
+      (a) => !a.checkOut || a.checkOut === '-' || a.checkOut.trim() === ''
+    );
+    if (missing.length === 0) {
+      triggerNotification('ممتاز! لا توجد حالياً أي سجلات حضور تنقصها أوقات الانصراف.');
+      return;
+    }
+    // Pre-fill suggested shift check-out for review/editing
+    const prepared = missing.map((rec) => {
+      const fixed = fixAttendanceRecord(rec, shifts);
+      const matchedShift = shifts.find(
+        (s) => s.name === fixed.shiftName || s.id === fixed.shiftName
+      ) || shifts[0];
+      return {
+        ...fixed,
+        checkOut: fixed.checkOut && fixed.checkOut !== '-' ? fixed.checkOut : (matchedShift?.endTime || '16:00'),
+      };
+    });
+    setMissingCheckoutRows(prepared);
+    setShowMissingCheckoutsModal(true);
+  };
+
+  const handleRepairAndFixAttendance = (
+    mode: 'merge_and_autofill' | 'merge_only' | 'autofill_shifts' | 'custom_time',
+    customTime?: string
+  ) => {
+    if (!attendance || attendance.length === 0) {
+      triggerNotification('لا توجد سجلات حضور مسجلة لمعالجتها.');
+      return;
+    }
+
+    // Step 1: Group existing records by (employeeId/name + date) to merge split check-in/check-outs or rapid duplicates
+    const grouped = new Map<string, AttendanceRecord[]>();
+    for (const rec of attendance) {
+      const key = `${rec.employeeId || rec.employeeName}___${rec.date}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, []);
+      }
+      grouped.get(key)!.push(rec);
+    }
+
+    const repairedRecords: AttendanceRecord[] = [];
+    let mergedCount = 0;
+    let autofilledCount = 0;
+
+    grouped.forEach((recordsList) => {
+      if (recordsList.length > 1) {
+        mergedCount += (recordsList.length - 1);
+
+        // Collect all distinct valid times
+        const times: string[] = [];
+        recordsList.forEach((r) => {
+          if (r.checkIn && r.checkIn !== '-') times.push(r.checkIn);
+          if (r.checkOut && r.checkOut !== '-') times.push(r.checkOut);
+        });
+
+        times.sort();
+
+        const baseRec = recordsList[0];
+        let bestIn = times.length > 0 ? times[0] : (baseRec.checkIn || '08:00');
+        let bestOut = times.length > 1 ? times[times.length - 1] : (baseRec.checkOut || '-');
+
+        if (bestOut === bestIn) {
+          bestOut = '-';
+        }
+
+        const mergedRec: AttendanceRecord = {
+          ...baseRec,
+          checkIn: bestIn,
+          checkOut: bestOut,
+          notes: recordsList.map((r) => r.notes).filter(Boolean).join(' | ') || baseRec.notes,
+        };
+
+        repairedRecords.push(mergedRec);
+      } else {
+        repairedRecords.push({ ...recordsList[0] });
+      }
+    });
+
+    // Step 2: Auto-fill remaining missing checkouts if requested
+    const finalRecords = repairedRecords.map((rec) => {
+      const hasMissingOut = !rec.checkOut || rec.checkOut === '-' || rec.checkOut.trim() === '';
+      if (!hasMissingOut) {
+        return fixAttendanceRecord(rec, shifts);
+      }
+
+      if (mode === 'merge_and_autofill' || mode === 'autofill_shifts') {
+        autofilledCount++;
+        const fixedTemp = fixAttendanceRecord(rec, shifts);
+        const matchedShift = shifts.find(
+          (s) => s.name === fixedTemp.shiftName || s.id === fixedTemp.shiftName
+        ) || shifts[0];
+        const shiftEndTime = matchedShift ? matchedShift.endTime : '16:00';
+
+        return fixAttendanceRecord(
+          {
+            ...rec,
+            checkOut: shiftEndTime,
+            notes: rec.notes ? `${rec.notes} (انصراف الوردية)` : 'تم تعيين وقت انصراف نهاية الوردية',
+          },
+          shifts
+        );
+      } else if (mode === 'custom_time' && customTime) {
+        autofilledCount++;
+        return fixAttendanceRecord(
+          {
+            ...rec,
+            checkOut: customTime,
+            notes: rec.notes ? `${rec.notes} (انصراف ${customTime})` : `تم تعيين وقت الانصراف ${customTime}`,
+          },
+          shifts
+        );
+      }
+
+      return fixAttendanceRecord(rec, shifts);
+    });
+
+    // Step 3: Commit updates
+    if (onBatchUpdateAttendance) {
+      onBatchUpdateAttendance(finalRecords);
+    } else {
+      finalRecords.forEach((r) => onUpdateAttendanceRecord(r));
+    }
+
+    setShowMissingCheckoutsModal(false);
+
+    if (mode === 'merge_only') {
+      triggerNotification(`تم بنجاح دمج وتطهير ${mergedCount} سجلات وبصمات مكررة لنفس اليوم.`);
+    } else {
+      triggerNotification(
+        `تمت المعالجة بنجاح! تم دمج ${mergedCount} سجلات مكررة وتعبئة أوقات الانصراف لـ ${autofilledCount} سجلاً.`
+      );
+    }
+  };
+
+  const handleSaveMissingCheckoutsFromModal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (missingCheckoutRows.length === 0) {
+      setShowMissingCheckoutsModal(false);
+      return;
+    }
+
+    const missingMap = new Map<string, AttendanceRecord>();
+    missingCheckoutRows.forEach((r) => {
+      missingMap.set(r.id || `${r.employeeId}-${r.date}`, fixAttendanceRecord(r, shifts));
+    });
+
+    const updatedAll = attendance.map((rec) => {
+      const key = rec.id || `${rec.employeeId}-${rec.date}`;
+      if (missingMap.has(key)) {
+        return missingMap.get(key)!;
+      }
+      return fixAttendanceRecord(rec, shifts);
+    });
+
+    if (onBatchUpdateAttendance) {
+      onBatchUpdateAttendance(updatedAll);
+    } else {
+      missingCheckoutRows.forEach((r) => {
+        onUpdateAttendanceRecord(fixAttendanceRecord(r, shifts));
+      });
+    }
+
+    setShowMissingCheckoutsModal(false);
+    triggerNotification(`تم بنجاح حفظ وتحديث أوقات الانصراف لـ ${missingCheckoutRows.length} سجلاً!`);
   };
 
   const handleBatchSubmit = (e: React.FormEvent) => {
@@ -580,7 +960,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   const handleSaveRecord = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingRecord) {
-      const fixed = fixAttendanceRecord(editingRecord);
+      const fixed = fixAttendanceRecord(editingRecord, shifts);
       onUpdateAttendanceRecord(fixed);
       setEditingRecord(null);
       triggerNotification(`تم تحديث سجل حضور الموظف ${fixed.employeeName}`);
@@ -593,7 +973,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
     const created: Shift = {
       id: `sh-${Date.now()}`,
       name: newShift.name,
-      type: newShift.type as any || 'morning',
+      type: (newShift.type as any) || 'morning',
       startTime: newShift.startTime || '08:00',
       endTime: newShift.endTime || '16:00',
       gracePeriodMinutes: Number(newShift.gracePeriodMinutes) || 15,
@@ -619,7 +999,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   const handleSaveBatchAttendance = (e: React.FormEvent) => {
     e.preventDefault();
     batchAttendanceData.forEach((rec) => {
-      onUpdateAttendanceRecord(fixAttendanceRecord(rec));
+      onUpdateAttendanceRecord(fixAttendanceRecord(rec, shifts));
     });
     setShowBatchAttendanceEditModal(false);
     triggerNotification(`تم تحديث وحفظ كافة التعديلات على جدول الحضور اليومي بنجاح!`);
@@ -640,6 +1020,8 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         return { label: 'انصراف مبكر', color: 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' };
       case 'sick_leave':
         return { label: 'إجازة مرضية', color: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' };
+      case 'work_injury':
+        return { label: 'إصابة عمل', color: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' };
       case 'casual_leave':
         return { label: 'إجازة عارضة', color: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' };
       case 'annual_leave':
@@ -651,12 +1033,62 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
     }
   };
 
+  const missingCheckoutsTotalCount = useMemo(() => {
+    return attendance.filter((a) => !a.checkOut || a.checkOut === '-' || a.checkOut.trim() === '').length;
+  }, [attendance]);
+
   const displayedAttendance = useMemo(() => {
-    const list = !selectedDate ? attendance : attendance.filter((a) => a.date === selectedDate);
-    return list.map(fixAttendanceRecord);
-  }, [attendance, selectedDate]);
+    let list = !selectedDate ? attendance : attendance.filter((a) => a.date === selectedDate);
+    if (selectedEmployeeId) {
+      list = list.filter((a) => a.employeeId === selectedEmployeeId);
+    }
+    if (filterOnlyMissingCheckouts) {
+      list = list.filter((a) => !a.checkOut || a.checkOut === '-' || a.checkOut.trim() === '');
+    }
+    const fixed = list.map((rec) => {
+      const fixedRec = fixAttendanceRecord(rec, shifts);
+      if (employees) {
+        const emp = employees.find(e => e.id === fixedRec.employeeId || e.employeeCode === fixedRec.employeeId?.replace('emp-dat-', ''));
+        if (emp && emp.department) {
+          fixedRec.department = emp.department;
+        }
+      }
+      return fixedRec;
+    });
+    if (searchTerm && searchTerm.trim()) {
+      const q = searchTerm.trim().toLowerCase();
+      return fixed.filter(
+        (a) =>
+          a.employeeName.toLowerCase().includes(q) ||
+          a.department.toLowerCase().includes(q) ||
+          (a.shiftName && a.shiftName.toLowerCase().includes(q)) ||
+          a.date.includes(q)
+      );
+    }
+    return fixed;
+  }, [attendance, selectedDate, selectedEmployeeId, filterOnlyMissingCheckouts, searchTerm, shifts, employees]);
 
   const totalDelaysMinutes = displayedAttendance.reduce((sum, a) => sum + (a.delayMinutes || 0), 0);
+
+  const handleExportExcel = () => {
+    const dataToExport = displayedAttendance.map((rec) => ({
+      'اسم الموظف': rec.employeeName,
+      'القسم': rec.department,
+      'التاريخ': rec.date,
+      'وقت الحضور': rec.checkIn,
+      'وقت الانصراف': rec.checkOut,
+      'التأخير (دقائق)': rec.delayMinutes,
+      'الخروج المبكر (دقائق)': rec.earlyLeaveMinutes,
+      'الحالة': getStatusBadge(rec.status).label,
+      'ملاحظات': rec.notes || '-',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'سجلات الحضور');
+    XLSX.writeFile(wb, `Attendance_Export_${selectedDate || 'All'}.xlsx`);
+    triggerNotification('تم تصدير سجلات الحضور بنجاح.');
+  };
 
   return (
     <div className="space-y-6 pb-10">
@@ -712,6 +1144,40 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           {/* Action Buttons Toolbar */}
           <div className="flex flex-wrap items-center justify-end gap-2 mb-2">
             <button
+              onClick={handleOpenMissingCheckoutsModal}
+              className="px-3.5 py-1.5 rounded-full text-white text-xs font-bold bg-amber-600 hover:bg-amber-700 transition-colors flex items-center gap-1.5 shadow-sm shadow-amber-600/30 active:scale-98 cursor-pointer ring-1 ring-amber-400/50"
+              title="معالجة وحل مشكلة أوقات الانصراف المفقودة وتعبئة نهايات الورديات"
+            >
+              <Zap className="w-4 h-4 text-amber-200" />
+              <span>معالجة أوقات الانصراف المفقودة</span>
+              {missingCheckoutsTotalCount > 0 && (
+                <span className="bg-amber-950/80 text-amber-200 text-[10px] px-1.5 py-0.2 rounded-full font-mono font-black">
+                  {missingCheckoutsTotalCount} ناقص
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => {
+                setFilterOnlyMissingCheckouts(!filterOnlyMissingCheckouts);
+                if (!filterOnlyMissingCheckouts) {
+                  triggerNotification('تم تصفية العرض لعرض السجلات التي تنقصها أوقات الانصراف فقط.');
+                } else {
+                  triggerNotification('تم إلغاء التصفية وعرض جميع السجلات.');
+                }
+              }}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 active:scale-98 cursor-pointer border ${
+                filterOnlyMissingCheckouts
+                  ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-200 border-amber-400 dark:border-amber-600 ring-2 ring-amber-400/30'
+                  : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50'
+              }`}
+              title="تصفية الجدول لإظهار السجلات التي تنقصها بصمة الخروج فقط"
+            >
+              <Filter className="w-3.5 h-3.5 text-amber-500" />
+              <span>سجلات بدون انصراف ({missingCheckoutsTotalCount})</span>
+            </button>
+
+            <button
               onClick={() => {
                 setBatchAttendanceData(attendance.map((r) => ({ ...r })));
                 setShowBatchAttendanceEditModal(true);
@@ -724,6 +1190,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
             <button
               onClick={() => {
                 setSelectedDate('');
+                setFilterOnlyMissingCheckouts(false);
                 triggerNotification('تم عرض كافة سجلات الحضور لجميع الفترات.');
               }}
               className="px-3 py-1.5 rounded-full border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 text-xs font-bold bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 transition-colors flex items-center gap-1.5 active:scale-98"
@@ -732,14 +1199,16 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               كل السجلات
             </button>
             <button
+              id="today-attendance-filter-btn"
               onClick={() => {
-                setSelectedDate('2026-07-26');
-                triggerNotification('تم تصفية العرض لبصمات اليوم (2026-07-26).');
+                const today = getTodayDateString();
+                setSelectedDate(today);
+                triggerNotification(`تم تصفية العرض لبصمات اليوم (${today}).`);
               }}
-              className="px-3 py-1.5 rounded-full border border-transparent text-white text-xs font-bold bg-blue-600 hover:bg-blue-700 transition-colors flex items-center gap-1.5 shadow-sm shadow-blue-600/20 active:scale-98"
+              className="px-3 py-1.5 rounded-full border border-transparent text-white text-xs font-bold bg-blue-600 hover:bg-blue-700 transition-colors flex items-center gap-1.5 shadow-sm shadow-blue-600/20 active:scale-98 cursor-pointer"
             >
               <CheckCircle2 className="w-4 h-4" />
-              بصمات اليوم
+              <span>بصمات اليوم</span>
             </button>
             <button
               onClick={() => setShowBatchModal(true)}
@@ -763,22 +1232,74 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               <FileSpreadsheet className="w-4 h-4 text-white" />
               <span>استيراد ملفات البصمة (.dat)</span>
             </button>
+            <button
+              onClick={handleExportExcel}
+              className="px-3 py-1.5 rounded-full border border-transparent text-white text-xs font-bold bg-emerald-500 hover:bg-emerald-600 transition-colors flex items-center gap-1.5 shadow-sm shadow-emerald-500/20 active:scale-98 cursor-pointer"
+              title="تصدير السجلات المعروضة بصيغة إكسيل"
+            >
+              <Download className="w-4 h-4 text-white" />
+              <span>تصدير لإكسيل</span>
+            </button>
+            {onClearAttendance && (
+              <button
+                onClick={() => setShowClearConfirmModal(true)}
+                className="px-3 py-1.5 rounded-full border border-transparent text-white text-xs font-bold bg-red-500 hover:bg-red-600 transition-colors flex items-center gap-1.5 shadow-sm shadow-red-500/20 active:scale-98 cursor-pointer"
+                title="إزالة جميع بصمات الحضور"
+              >
+                <Trash2 className="w-4 h-4 text-white" />
+                <span>إزالة البصمات</span>
+              </button>
+            )}
           </div>
 
           {/* Daily Summary Metrics & Date Selection */}
           <div className="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <CalendarIcon className="w-4 h-4 text-blue-600" />
-              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">تاريخ الحضور:</span>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="py-1.5 px-3 text-xs rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold focus:outline-none"
-              />
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-3">
+                <CalendarIcon className="w-4 h-4 text-blue-600" />
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-200">تاريخ الحضور:</span>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="py-1.5 px-3 text-xs rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Users className="w-4 h-4 text-indigo-600" />
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-200">تصفية بالموظف:</span>
+                <select
+                  value={selectedEmployeeId}
+                  onChange={(e) => setSelectedEmployeeId(e.target.value)}
+                  className="py-1.5 px-3 text-xs rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold focus:outline-none max-w-[200px]"
+                >
+                  <option value="">جميع الموظفين</option>
+                  {employees?.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {formatEmployeeDisplayName(emp.name, emp.employeeId, emp.code)}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
-            <div className="flex items-center gap-3 text-xs">
+            <div className="flex flex-wrap items-center gap-2.5 text-xs">
+              {missingCheckoutsTotalCount > 0 && (
+                <div
+                  onClick={handleOpenMissingCheckoutsModal}
+                  className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-200 px-3.5 py-1.5 rounded-xl border border-amber-300 dark:border-amber-800 cursor-pointer transition-colors"
+                  title="اضغط لفتح معالج حل أوقات الانصراف"
+                >
+                  <AlertCircle className="w-4 h-4 text-amber-600" />
+                  <span className="font-bold">
+                    يوجد <strong className="font-black text-amber-900 dark:text-amber-100">{missingCheckoutsTotalCount}</strong> سجلات بدون انصراف
+                  </span>
+                  <span className="text-[10px] bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-100 px-2 py-0.5 rounded-md font-bold">
+                    حل المشكلة الآن
+                  </span>
+                </div>
+              )}
               <button
                 onClick={() => {
                   setBatchAttendanceData(attendance.map((r) => ({ ...r })));
@@ -789,9 +1310,9 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 <Edit2 className="w-3.5 h-3.5" />
                 <span>تعديل جدول الحضور السريع</span>
               </button>
-              <div className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 px-3 py-1.5 rounded-xl border border-amber-200/60 dark:border-amber-800">
-                <AlertCircle className="w-4 h-4 text-amber-600" />
-                <span className="font-bold">إجمالي دقائق التأخير اليوم: {totalDelaysMinutes} دقيقة</span>
+              <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-300 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                <Clock className="w-4 h-4 text-blue-600" />
+                <span className="font-bold">إجمالي التأخير: {totalDelaysMinutes} دقيقة</span>
               </div>
             </div>
           </div>
@@ -814,6 +1335,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 {displayedAttendance.length > 0 ? (
                   displayedAttendance.map((rec, idx) => {
                     const badge = getStatusBadge(rec.status);
+                    const isMissingOut = !rec.checkOut || rec.checkOut === '-' || rec.checkOut.trim() === '';
 
                     return (
                       <tr key={`att-log-${rec.id}-${idx}`} className="hover:bg-white/80 dark:hover:bg-slate-700/40 transition-colors">
@@ -822,7 +1344,20 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                         </td>
                         <td className="p-3.5 text-slate-500">{rec.department}</td>
                         <td className="p-3.5 font-bold text-emerald-600">{rec.checkIn}</td>
-                        <td className="p-3.5 font-bold text-blue-600">{rec.checkOut}</td>
+                        <td className="p-3.5 font-bold">
+                          {isMissingOut ? (
+                            <button
+                              onClick={() => setEditingRecord(rec)}
+                              className="px-2 py-0.5 rounded-lg bg-amber-100/90 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 text-[11px] font-bold hover:bg-amber-200 transition-colors cursor-pointer flex items-center gap-1"
+                              title="انقر لتسجيل وقت الانصراف لهذا السجل"
+                            >
+                              <AlertCircle className="w-3 h-3 text-amber-600" />
+                              <span>غير مسجل (تعبئة)</span>
+                            </button>
+                          ) : (
+                            <span className="text-blue-600">{rec.checkOut}</span>
+                          )}
+                        </td>
                         <td className="p-3.5 font-extrabold text-amber-600">
                           {rec.delayMinutes > 0 ? `${rec.delayMinutes} د` : '-'}
                         </td>
@@ -853,29 +1388,45 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                         </div>
                         <div>
                           <p className="font-extrabold text-sm text-slate-700 dark:text-slate-200">
-                            لا توجد سجلات حضور مسجلة بتاريخ {selectedDate || 'المحدد'}
+                            {filterOnlyMissingCheckouts
+                              ? 'لا توجد أي سجلات تنقصها أوقات الانصراف!'
+                              : `لا توجد سجلات حضور مسجلة بتاريخ ${selectedDate || 'المحدد'}`}
                           </p>
                           <p className="text-xs text-slate-500 mt-1">
-                            {attendance.length > 0
+                            {filterOnlyMissingCheckouts
+                              ? 'جميع سجلات الحضور الحالية تحتوي على أوقات انصراف مكتملة.'
+                              : attendance.length > 0
                               ? `يوجد إجمالي ${attendance.length} سجل حضور في تواريخ أخرى.`
                               : 'جدول الحضور فارغ حالياً. يمكنك استيراد ملفات جهاز البصمة (.dat) مباشرة.'}
                           </p>
                         </div>
                         <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-                          <button
-                            onClick={() => fileInputRef.current?.click()}
-                            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-sm flex items-center gap-2 cursor-pointer transition-colors"
-                          >
-                            <FileSpreadsheet className="w-4 h-4" />
-                            <span>استيراد ملفات البصمة (.dat)</span>
-                          </button>
-                          {attendance.length > 0 && selectedDate && (
+                          {filterOnlyMissingCheckouts ? (
                             <button
-                              onClick={() => setSelectedDate('')}
-                              className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer transition-colors"
+                              onClick={() => setFilterOnlyMissingCheckouts(false)}
+                              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm flex items-center gap-2 cursor-pointer transition-colors"
                             >
-                              إظهار كافة سجلات الحضور ({attendance.length})
+                              <CalendarIcon className="w-4 h-4" />
+                              <span>عرض جميع السجلات</span>
                             </button>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-sm flex items-center gap-2 cursor-pointer transition-colors"
+                              >
+                                <FileSpreadsheet className="w-4 h-4" />
+                                <span>استيراد ملفات البصمة (.dat)</span>
+                              </button>
+                              {attendance.length > 0 && selectedDate && (
+                                <button
+                                  onClick={() => setSelectedDate('')}
+                                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer transition-colors"
+                                >
+                                  إظهار كافة سجلات الحضور ({attendance.length})
+                                </button>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>
@@ -894,6 +1445,19 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               قائمة الورديات المعتمدة ومواعيد الدوام
             </h3>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  if (confirm('هل أنت متأكد من استعادة الورديات الافتراضية؟ سيتم إزالة التعديلات الحالية.')) {
+                    if (onResetShifts) onResetShifts();
+                    triggerNotification('تم استعادة الورديات الافتراضية بنجاح.');
+                  }
+                }}
+                className="px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs shadow-sm flex items-center gap-2 cursor-pointer transition-colors"
+                title="استعادة الورديات الافتراضية"
+              >
+                <Settings className="w-4 h-4" />
+                <span>الورديات الافتراضية</span>
+              </button>
               <button
                 onClick={() => {
                   if (shifts.length > 0) {
@@ -1001,6 +1565,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                   <option value="annual_leave" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">إجازة اعتيادية</option>
                   <option value="casual_leave" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">إجازة عارضة</option>
                   <option value="sick_leave" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">إجازة مرضية</option>
+                  <option value="work_injury" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">إصابة عمل</option>
                   <option value="mission" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">مأمورية عمل</option>
                   <option value="early_leave" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">انصراف مبكر</option>
                 </select>
@@ -1184,7 +1749,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">تاريخ الحضور الجماعي</label>
                 <input
                   type="date"
-                  defaultValue="2026-07-26"
+                  defaultValue={getTodayDateString()}
                   className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold"
                 />
               </div>
@@ -1539,6 +2104,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                           <option value="annual_leave">إجازة اعتيادية</option>
                           <option value="casual_leave">إجازة عارضة</option>
                           <option value="sick_leave">إجازة مرضية</option>
+                          <option value="work_injury">إصابة عمل</option>
                           <option value="mission">مأمورية عمل</option>
                           <option value="early_leave">انصراف مبكر</option>
                         </select>
@@ -1737,6 +2303,295 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               >
                 <Check className="w-4 h-4" />
                 <span>تم، اعتماد وتطبيق الحضور</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Missing Checkouts Solver Modal */}
+      {showMissingCheckoutsModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl max-w-4xl w-full p-6 space-y-4 border border-slate-200 dark:border-slate-700 shadow-2xl animate-fade-in max-h-[92vh] flex flex-col dir-rtl text-right">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-3 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 dark:bg-amber-950/60 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                  <Zap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>معالجة وحل أوقات الانصراف المفقودة</span>
+                    <span className="text-xs bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 px-2.5 py-0.5 rounded-full font-bold">
+                      {missingCheckoutRows.length} سجل بحاجة للمعالجة
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    حل مشكلة عدم تسجيل بصمة الخروج أو استيراد ملفات البصمة بشكل منفصل
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMissingCheckoutsModal(false)}
+                className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Resolution Actions */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 shrink-0">
+              
+              {/* Option 1: Auto Fix & Shift End Times */}
+              <div className="bg-amber-50 dark:bg-amber-950/40 p-3.5 rounded-2xl border border-amber-200 dark:border-amber-900/60 flex flex-col justify-between space-y-2.5">
+                <div>
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-amber-900 dark:text-amber-200">
+                    <Sparkles className="w-4 h-4 text-amber-600" />
+                    <span>دمج وتعبئة نهاية الورديات (شامل)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                    يدمج الحركات المكررة تلقائياً، ويعيّن وقت نهاية وردية كل موظف كوقت انصراف.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRepairAndFixAttendance('merge_and_autofill')}
+                  className="w-full py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <CheckCheck className="w-4 h-4" />
+                  <span>تطبيق الحل التلقائي الموصى به</span>
+                </button>
+              </div>
+
+              {/* Option 2: Custom / Standard Time */}
+              <div className="bg-blue-50 dark:bg-blue-950/40 p-3.5 rounded-2xl border border-blue-200 dark:border-blue-900/60 flex flex-col justify-between space-y-2.5">
+                <div>
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-blue-900 dark:text-blue-200">
+                    <Clock className="w-4 h-4 text-blue-600" />
+                    <span>تعبئة وقت انصراف محدد</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
+                    تعيين وقت خروج موحد لجميع السجلات الناقصة:
+                  </p>
+                  <div className="flex items-center gap-1 mt-1.5">
+                    {['16:00', '16:30', '17:00', '18:00'].map((time) => (
+                      <button
+                        key={time}
+                        type="button"
+                        onClick={() => setUniversalCheckoutTime(time)}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-colors ${
+                          universalCheckoutTime === time
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                        }`}
+                      >
+                        {time}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={universalCheckoutTime}
+                    onChange={(e) => setUniversalCheckoutTime(e.target.value)}
+                    placeholder="16:30"
+                    className="w-20 p-1.5 text-center text-xs font-bold rounded-xl border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-900 text-blue-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRepairAndFixAttendance('custom_time', universalCheckoutTime)}
+                    className="grow py-2 px-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <span>تطبيق ({universalCheckoutTime})</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Option 3: Merge Split Punches Only */}
+              <div className="bg-slate-50 dark:bg-slate-900/60 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col justify-between space-y-2.5">
+                <div>
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-200">
+                    <ArrowRightLeft className="w-4 h-4 text-indigo-600" />
+                    <span>دمج بصمات الدخول والخروج فقط</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                    دمج السجلات المنفصلة لنفس الموظف في نفس اليوم دون إضافة أوقات افتراضية.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRepairAndFixAttendance('merge_only')}
+                  className="w-full py-2 px-3 rounded-xl bg-slate-700 hover:bg-slate-800 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Wrench className="w-4 h-4" />
+                  <span>دمج وتطهير السجلات فقط</span>
+                </button>
+              </div>
+
+            </div>
+
+            {/* Table of records needing checkout time */}
+            <div className="overflow-y-auto overflow-x-auto grow border border-slate-200 dark:border-slate-700 rounded-2xl max-h-[45vh]">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 font-bold sticky top-0 border-b border-slate-200 dark:border-slate-700 z-10">
+                  <tr>
+                    <th className="p-3">الموظف والوظيفة</th>
+                    <th className="p-3 text-center">التاريخ</th>
+                    <th className="p-3 text-center">وقت الحضور</th>
+                    <th className="p-3 text-center">وقت الانصراف (المقترح)</th>
+                    <th className="p-3 text-center">الوردية المقترنة</th>
+                    <th className="p-3 text-center">إجراء سريع</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
+                  {missingCheckoutRows.length > 0 ? (
+                    missingCheckoutRows.map((rec, idx) => {
+                      const matchedShift = shifts.find((s) => s.id === rec.shiftId) || shifts[0];
+                      const shiftEnd = matchedShift?.endTime || '16:30';
+
+                      return (
+                        <tr key={`missing-row-${rec.id || idx}`} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                          <td className="p-3 font-bold text-slate-800 dark:text-slate-200">
+                            {formatEmployeeDisplayName(rec.employeeName, rec.employeeId, employees)}
+                            <div className="text-[10px] text-slate-400 font-normal">{rec.department}</div>
+                          </td>
+                          <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                            {rec.date}
+                          </td>
+                          <td className="p-3 text-center font-bold text-emerald-600 font-mono">
+                            {rec.checkIn || '-'}
+                          </td>
+                          <td className="p-3 text-center">
+                            <input
+                              type="text"
+                              value={rec.checkOut === '-' ? '' : rec.checkOut}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setMissingCheckoutRows((prev) => {
+                                  const updated = [...prev];
+                                  updated[idx] = { ...updated[idx], checkOut: val };
+                                  return updated;
+                                });
+                              }}
+                              placeholder={shiftEnd}
+                              className="w-24 p-1.5 text-center rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/40 font-bold text-xs text-blue-600 focus:bg-white dark:focus:bg-slate-900 focus:outline-none"
+                            />
+                          </td>
+                          <td className="p-3 text-center">
+                            <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-lg">
+                              {matchedShift?.name || 'الوردية الأولى'} ({matchedShift?.startTime} - {matchedShift?.endTime})
+                            </span>
+                          </td>
+                          <td className="p-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMissingCheckoutRows((prev) => {
+                                  const updated = [...prev];
+                                  updated[idx] = { ...updated[idx], checkOut: shiftEnd };
+                                  return updated;
+                                });
+                              }}
+                              className="px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-bold cursor-pointer transition-colors"
+                              title={`تعيين وقت الانصراف ${shiftEnd}`}
+                            >
+                              تعيين {shiftEnd}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-slate-500 dark:text-slate-400">
+                        <div className="flex flex-col items-center justify-center space-y-2">
+                          <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                          <p className="font-bold text-sm text-slate-700 dark:text-slate-200">
+                            لا توجد أي سجلات بدون وقت انصراف!
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            جميع بصمات وسجلات الحضور مكتملة وبأوقات انصراف مسجلة.
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer */}
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between shrink-0">
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                {missingCheckoutRows.length > 0
+                  ? `سيتم حفظ وتحديث ${missingCheckoutRows.length} سجل بعد المراجعة.`
+                  : 'تم اكتمال مراجعة وتعديل جميع السجلات.'}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowMissingCheckoutsModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 font-bold text-xs cursor-pointer transition-colors"
+                >
+                  إغلاق
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveMissingCheckoutsFromModal}
+                  className="px-6 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>حفظ واعتماد التعديلات</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Clear Attendance Confirmation Modal */}
+      {showClearConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-100 dark:border-slate-700">
+            <div className="p-4 bg-red-50 dark:bg-red-900/30 border-b border-red-100 dark:border-red-800 flex justify-between items-center">
+              <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                <AlertCircle className="w-5 h-5" />
+                <h3 className="font-bold">تأكيد إزالة جميع السجلات</h3>
+              </div>
+              <button
+                onClick={() => setShowClearConfirmModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 text-sm text-slate-700 dark:text-slate-300 text-center leading-relaxed font-semibold">
+              <p>هل أنت متأكد من إزالة جميع بصمات الحضور المسجلة؟</p>
+              <p className="text-red-500 mt-2">لا يمكن التراجع عن هذه الخطوة نهائياً.</p>
+            </div>
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3">
+              <button
+                onClick={() => setShowClearConfirmModal(false)}
+                className="px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 font-bold text-xs transition-colors cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={() => {
+                  if (onClearAttendance) {
+                    onClearAttendance();
+                  }
+                  setShowClearConfirmModal(false);
+                  triggerNotification('تمت إزالة جميع بصمات الحضور المسجلة بنجاح.');
+                }}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-sm flex items-center gap-2 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>نعم، إزالة البصمات</span>
               </button>
             </div>
           </div>

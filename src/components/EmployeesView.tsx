@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import {
   Users,
   Search,
@@ -98,42 +99,187 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
     return str || '';
   };
 
-  // Download Sample Excel Template
-  const handleDownloadExcelTemplate = () => {
-    const sampleData = [
-      {
-        'الكود الوظيفي': '101',
-        'اسم الموظف': 'أحمد محمد علي',
-        'القسم': 'تكنولوجيا المعلومات',
-        'الوظيفة': 'مطور برمجيات',
-        'الراتب الأساسي': 5000,
-        'صلاحية الهوية': '2028-12-31',
-        'الحالة': 'نشط',
-      },
-      {
-        'الكود الوظيفي': '102',
-        'اسم الموظف': 'سارة محمود عبدالله',
-        'القسم': 'الموارد البشرية',
-        'الوظيفة': 'أخصائي توظيف',
-        'الراتب الأساسي': 4500,
-        'صلاحية الهوية': '2027-06-15',
-        'الحالة': 'نشط',
-      },
-      {
-        'الكود الوظيفي': '103',
-        'اسم الموظف': 'خالد إبراهيم',
-        'القسم': 'الحسابات',
-        'الوظيفة': 'محاسب عام',
-        'الراتب الأساسي': 4800,
-        'صلاحية الهوية': '2026-11-20',
-        'الحالة': 'إجازة',
-      },
-    ];
+  // Download Sample Excel Template with Dropdown Data Validation for Departments
+  const handleDownloadExcelTemplate = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'نظام إدارة الموارد البشرية';
+      workbook.lastModifiedBy = 'نظام إدارة الموارد البشرية';
+      workbook.created = new Date();
+      workbook.modified = new Date();
 
-    const worksheet = XLSX.utils.json_to_sheet(sampleData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'الموظفين');
-    XLSX.writeFile(workbook, 'نموذج_استيراد_الموظفين.xlsx');
+      // Official 10 departments list from system / props
+      const deptNames =
+        departments && departments.length > 0
+          ? departments.map((d) => d.name)
+          : [
+              'تكنولوجيا المعلومات',
+              'الموارد البشرية',
+              'التسويق والمبيعات',
+              'المالية والمحاسبة',
+              'التشغيل والخدمات',
+              'قسم الإدارة',
+              'قسم المخازن',
+              'قسم الجودة',
+              'قسم الحركة والنقل',
+              'قسم المشتريات',
+            ];
+
+      // 1. Reference Worksheet: الأقسام (Departments List)
+      const deptSheet = workbook.addWorksheet('الأقسام', {
+        views: [{ rightToLeft: true }],
+      });
+
+      deptSheet.columns = [
+        { header: 'الأقسام المعتمدة في النظام', key: 'name', width: 32 },
+        { header: 'ملاحظات وتوجيهات', key: 'notes', width: 50 },
+      ];
+
+      // Style Dept Sheet Header
+      const deptHeaderRow = deptSheet.getRow(1);
+      deptHeaderRow.height = 28;
+      deptHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11, name: 'Segoe UI' };
+      deptHeaderRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      deptHeaderRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF0F766E' }, // Teal
+      };
+
+      deptNames.forEach((dept, idx) => {
+        const r = deptSheet.addRow({
+          name: dept,
+          notes: idx === 0 ? 'هذه قائمة الـ 10 أقسام المعتمدة في النظام وتستخدم كقائمة منسدلة داخل شيت الموظفين' : '',
+        });
+        r.height = 22;
+        r.alignment = { vertical: 'middle', horizontal: 'right' };
+        r.font = { size: 10, name: 'Segoe UI' };
+      });
+
+      // 2. Main Worksheet: الموظفين (Employees Sheet)
+      const worksheet = workbook.addWorksheet('الموظفين', {
+        views: [{ rightToLeft: true }],
+      });
+
+      worksheet.columns = [
+        { header: 'الكود الوظيفي', key: 'code', width: 16 },
+        { header: 'اسم الموظف', key: 'name', width: 28 },
+        { header: 'القسم', key: 'department', width: 26 },
+        { header: 'الوظيفة', key: 'position', width: 24 },
+        { header: 'الراتب الأساسي', key: 'baseSalary', width: 18 },
+        { header: 'الحافز', key: 'incentive', width: 15 },
+        { header: 'البدلات', key: 'allowances', width: 15 },
+        { header: 'صلاحية الهوية', key: 'idExpiry', width: 18 },
+        { header: 'الحالة', key: 'status', width: 16 },
+      ];
+
+      // Style Main Header Row
+      const headerRow = worksheet.getRow(1);
+      headerRow.height = 30;
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11, name: 'Segoe UI' };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF1E3A8A' }, // Deep Navy / Slate
+      };
+
+      // Sample Data - all 3 rows strictly using the official 10 departments
+      const sampleData = [
+        {
+          code: '101',
+          name: 'أحمد محمد علي',
+          department: 'تكنولوجيا المعلومات',
+          position: 'مطور برمجيات',
+          baseSalary: 5000,
+          incentive: 500,
+          allowances: 750,
+          idExpiry: '2028-12-31',
+          status: 'نشط',
+        },
+        {
+          code: '102',
+          name: 'سارة محمود عبدالله',
+          department: 'الموارد البشرية',
+          position: 'أخصائي توظيف',
+          baseSalary: 4500,
+          incentive: 400,
+          allowances: 500,
+          idExpiry: '2027-06-15',
+          status: 'نشط',
+        },
+        {
+          code: '103',
+          name: 'خالد إبراهيم',
+          department: 'المالية والمحاسبة',
+          position: 'محاسب عام',
+          baseSalary: 4800,
+          incentive: 300,
+          allowances: 600,
+          idExpiry: '2026-11-20',
+          status: 'إجازة',
+        },
+      ];
+
+      sampleData.forEach((item) => {
+        const row = worksheet.addRow(item);
+        row.height = 24;
+        row.alignment = { vertical: 'middle', horizontal: 'right' };
+        row.font = { size: 10, name: 'Segoe UI' };
+      });
+
+      // Number formatting for numeric columns
+      worksheet.getColumn('E').numFmt = '#,##0';
+      worksheet.getColumn('F').numFmt = '#,##0';
+      worksheet.getColumn('G').numFmt = '#,##0';
+
+      // Set Data Validation Dropdown for Department column (C) from C2 to C1000
+      const lastDeptRow = deptNames.length + 1;
+      for (let r = 2; r <= 1000; r++) {
+        const deptCell = worksheet.getCell(`C${r}`);
+        deptCell.dataValidation = {
+          type: 'list',
+          allowBlank: true,
+          formulae: [`الأقسام!$A$2:$A$${lastDeptRow}`],
+          showInputMessage: true,
+          promptTitle: 'اختر القسم',
+          prompt: 'يرجى اختيار القسم من القائمة المنسدلة المعتمدة في النظام (10 أقسام).',
+          showErrorMessage: true,
+          errorTitle: 'قسم غير معتمد',
+          error: 'يرجى اختيار قسم من القائمة المنسدلة فقط لضمان مطابقة بيانات الأقسام في النظام.',
+        };
+
+        // Status Dropdown (I)
+        const statusCell = worksheet.getCell(`I${r}`);
+        statusCell.dataValidation = {
+          type: 'list',
+          allowBlank: true,
+          formulae: ['"نشط,إجازة,موقوف,ترك العمل"'],
+          showInputMessage: true,
+          promptTitle: 'حالة الموظف',
+          prompt: 'اختر حالة الموظف (نشط، إجازة، موقوف، ترك العمل)',
+          showErrorMessage: true,
+          errorTitle: 'حالة غير صحيحة',
+          error: 'يرجى اختيار حالة صالحة من القائمة المنسدلة.',
+        };
+      }
+
+      // Generate binary and trigger download in browser
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'نموذج_استيراد_الموظفين_المعتمد.xlsx';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error generating Excel template with data validation:', err);
+    }
   };
 
   // Process selected file
@@ -150,8 +296,11 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
         const buffer = evt.target?.result;
         if (!buffer) return;
         const wb = XLSX.read(buffer, { type: 'array' });
-        const firstSheetName = wb.SheetNames[0];
-        const ws = wb.Sheets[firstSheetName];
+        // Intelligently select 'الموظفين' or 'Employees' sheet first, fallback to first sheet
+        const sheetName =
+          wb.SheetNames.find((n) => n.includes('موظف') || n.toLowerCase().includes('employee')) ||
+          wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
         const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' });
 
         if (!rows || rows.length === 0) {
@@ -167,6 +316,10 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
           let department = 'عام';
           let position = 'موظف';
           let baseSalary = 0;
+          let incentiveVal = 0;
+          let allowancesVal = 0;
+          let housingVal = 0;
+          let transportVal = 0;
           let iqamaExpiryDate = '';
           let statusStr = '';
 
@@ -186,6 +339,18 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
             } else if (k.includes('راتب') || k.includes('salary') || k.includes('اساسي') || k.includes('أساسي') || k.includes('basic')) {
               const num = parseFloat(v.replace(/[^0-9.]/g, ''));
               if (!isNaN(num)) baseSalary = num;
+            } else if (k.includes('حافز') || k.includes('مكافأ') || k.includes('مكافا') || k.includes('incentive') || k.includes('bonus')) {
+              const num = parseFloat(v.replace(/[^0-9.]/g, ''));
+              if (!isNaN(num)) incentiveVal = num;
+            } else if (k.includes('سكن') || k.includes('housing')) {
+              const num = parseFloat(v.replace(/[^0-9.]/g, ''));
+              if (!isNaN(num)) housingVal = num;
+            } else if (k.includes('مواصلات') || k.includes('انتقال') || k.includes('transport')) {
+              const num = parseFloat(v.replace(/[^0-9.]/g, ''));
+              if (!isNaN(num)) transportVal = num;
+            } else if (k.includes('بدل') || k.includes('allowance')) {
+              const num = parseFloat(v.replace(/[^0-9.]/g, ''));
+              if (!isNaN(num)) allowancesVal = num;
             } else if (k.includes('هوية') || k.includes('إقامة') || k.includes('اقامة') || k.includes('انتهاء') || k.includes('صلاحية') || k.includes('expiry') || k.includes('iqama')) {
               iqamaExpiryDate = parseExcelDate(val);
             } else if (k.includes('حالة') || k.includes('status')) {
@@ -208,6 +373,19 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
           const finalCode = employeeCode || cleanCode;
           const finalName = name || `موظف رقم (${cleanCode})`;
 
+          // Ensure department matches exact 10 departments if close match
+          if (departments && departments.length > 0) {
+            const matchedDept = departments.find((d) => d.name.trim() === department.trim());
+            if (matchedDept) {
+              department = matchedDept.name;
+            } else {
+              const fuzzyDept = departments.find((d) => d.name.includes(department.trim()) || department.includes(d.name));
+              if (fuzzyDept) {
+                department = fuzzyDept.name;
+              }
+            }
+          }
+
           let finalStatus: 'active' | 'on_leave' | 'suspended' | 'resigned' = 'active';
           const sLower = statusStr.toLowerCase();
           if (sLower.includes('إجازة') || sLower.includes('اجازة') || sLower.includes('leave')) {
@@ -218,19 +396,21 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
             finalStatus = 'resigned';
           }
 
+          const combinedOtherAllowances = (allowancesVal || 0) + (incentiveVal || 0);
+
           const newEmp: Employee = {
             id: `emp-dat-${cleanCode}`,
             employeeCode: finalCode,
             name: finalName,
             position: position || 'موظف',
-            department: department || 'عام',
+            department: department || 'تكنولوجيا المعلومات',
             email: '',
             phone: '',
             avatar: '',
             baseSalary: baseSalary || 0,
-            housingAllowance: 0,
-            transportAllowance: 0,
-            otherAllowances: 0,
+            housingAllowance: housingVal || 0,
+            transportAllowance: transportVal || 0,
+            otherAllowances: combinedOtherAllowances || 0,
             gosiInsurance: 0,
             iqamaOrIdNumber: finalCode,
             iqamaExpiryDate: iqamaExpiryDate || '',
@@ -1335,20 +1515,24 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700/80 space-y-3">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div>
-                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                    الأعمدة المدعومة في ملف الاكسل:
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <span>الأعمدة المدعومة في نموذج ملف الإكسيل المعتمد:</span>
+                    <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[10px] font-extrabold">
+                      قائمة منسدلة للأقسام الـ 10
+                    </span>
                   </h4>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                    اسم الموظف • الكود الوظيفي • القسم • الوظيفة • الراتب الأساسي • صلاحية الهوية • الحالة
+                    اسم الموظف • الكود الوظيفي • <strong className="text-blue-600 dark:text-blue-400">القسم (قائمة منسدلة للـ 10 أقسام المعتمدة في النظام)</strong> • الوظيفة • <strong className="text-emerald-600 dark:text-emerald-400">الراتب الأساسي</strong> • <strong className="text-emerald-600 dark:text-emerald-400">الحافز</strong> • <strong className="text-emerald-600 dark:text-emerald-400">البدلات</strong> • صلاحية الهوية • الحالة
                   </p>
                 </div>
                 <button
+                  id="download-excel-template-btn"
                   type="button"
                   onClick={handleDownloadExcelTemplate}
-                  className="px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 font-bold text-xs flex items-center gap-2 transition-colors shrink-0 cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-emerald-500/20 transition-all shrink-0 cursor-pointer"
                 >
-                  <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>تحميل نموذج Excel المعتمد</span>
+                  <Download className="w-4 h-4 text-white" />
+                  <span>تحميل نموذج Excel المعتمد (مع قائمة الأقسام)</span>
                 </button>
               </div>
             </div>
@@ -1410,40 +1594,52 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                         <th className="p-2.5">القسم</th>
                         <th className="p-2.5">الوظيفة</th>
                         <th className="p-2.5">الراتب الأساسي</th>
+                        <th className="p-2.5 text-emerald-600 dark:text-emerald-400">الحافز والبدلات</th>
+                        <th className="p-2.5">إجمالي الراتب</th>
                         <th className="p-2.5">صلاحية الهوية</th>
                         <th className="p-2.5 text-center">الحالة</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {parsedImportEmps.map((emp, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                          <td className="p-2.5 font-mono font-bold text-blue-600 dark:text-blue-400">
-                            {emp.employeeCode}
-                          </td>
-                          <td className="p-2.5 font-bold text-slate-800 dark:text-slate-200">{emp.name}</td>
-                          <td className="p-2.5 text-slate-600 dark:text-slate-400">{emp.department}</td>
-                          <td className="p-2.5 text-slate-600 dark:text-slate-400">{emp.position}</td>
-                          <td className="p-2.5 font-bold text-slate-800 dark:text-slate-200">
-                            {emp.baseSalary.toLocaleString()} {currencySymbol}
-                          </td>
-                          <td className="p-2.5 text-slate-600 dark:text-slate-400 font-mono">
-                            {emp.iqamaExpiryDate}
-                          </td>
-                          <td className="p-2.5 text-center">
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                emp.status === 'active'
-                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                                  : emp.status === 'on_leave'
-                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                                  : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                              }`}
-                            >
-                              {emp.status === 'active' ? 'نشط' : emp.status === 'on_leave' ? 'إجازة' : 'متوقف/غير نشط'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
+                      {parsedImportEmps.map((emp, idx) => {
+                        const totalAllowances = emp.housingAllowance + emp.transportAllowance + emp.otherAllowances;
+                        const totalSalary = emp.baseSalary + totalAllowances;
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                            <td className="p-2.5 font-mono font-bold text-blue-600 dark:text-blue-400">
+                              {emp.employeeCode}
+                            </td>
+                            <td className="p-2.5 font-bold text-slate-800 dark:text-slate-200">{emp.name}</td>
+                            <td className="p-2.5 text-slate-600 dark:text-slate-400">{emp.department}</td>
+                            <td className="p-2.5 text-slate-600 dark:text-slate-400">{emp.position}</td>
+                            <td className="p-2.5 font-bold text-slate-800 dark:text-slate-200">
+                              {emp.baseSalary.toLocaleString()} {currencySymbol}
+                            </td>
+                            <td className="p-2.5 font-bold text-emerald-600 dark:text-emerald-400">
+                              +{totalAllowances.toLocaleString()} {currencySymbol}
+                            </td>
+                            <td className="p-2.5 font-bold text-blue-600 dark:text-blue-400">
+                              {totalSalary.toLocaleString()} {currencySymbol}
+                            </td>
+                            <td className="p-2.5 text-slate-600 dark:text-slate-400 font-mono">
+                              {emp.iqamaExpiryDate || '—'}
+                            </td>
+                            <td className="p-2.5 text-center">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  emp.status === 'active'
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                    : emp.status === 'on_leave'
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                    : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                                }`}
+                              >
+                                {emp.status === 'active' ? 'نشط' : emp.status === 'on_leave' ? 'إجازة' : 'متوقف/غير نشط'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

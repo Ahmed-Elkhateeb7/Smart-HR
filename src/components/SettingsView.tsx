@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings,
   Building2,
@@ -8,14 +8,20 @@ import {
   Save,
   Check,
   Moon,
-  Sun
+  Sun,
+  Info,
+  Upload,
+  Trash2
 } from 'lucide-react';
+import { CompanySettings } from '../types';
 
 interface SettingsViewProps {
   darkMode: boolean;
   setDarkMode: (val: boolean) => void;
   currencySymbol: string;
   setCurrencySymbol: (val: string) => void;
+  companySettings?: CompanySettings;
+  onUpdateCompanySettings?: (settings: CompanySettings) => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -23,16 +29,66 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   setDarkMode,
   currencySymbol,
   setCurrencySymbol,
+  companySettings,
+  onUpdateCompanySettings,
 }) => {
-  const [companyName, setCompanyName] = useState('');
-  const [taxNumber, setTaxNumber] = useState('');
-  const [crNumber, setCrNumber] = useState('');
-  const [gracePeriod, setGracePeriod] = useState<string | number>('');
-  const [gosiRate, setGosiRate] = useState<string | number>('');
+  const [companyName, setCompanyName] = useState(companySettings?.companyName || 'شركة جديدة');
+  const [taxNumber, setTaxNumber] = useState(companySettings?.taxNumber || '');
+  const [crNumber, setCrNumber] = useState(companySettings?.commercialRecord || '');
+  const [logoUrl, setLogoUrl] = useState(companySettings?.logoUrl || '');
+  const [gosiRate, setGosiRate] = useState<number | string>(companySettings?.gosiEmployeePercent ?? 11);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  useEffect(() => {
+    if (companySettings) {
+      setCompanyName(companySettings.companyName || '');
+      setTaxNumber(companySettings.taxNumber || '');
+      setCrNumber(companySettings.commercialRecord || '');
+      setLogoUrl(companySettings.logoUrl || '');
+      setGosiRate(companySettings.gosiEmployeePercent ?? 11);
+    }
+  }, [companySettings]);
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 3 * 1024 * 1024) {
+        alert('حجم الصورة كبير جداً، يرجى اختيار صورة أقل من 3 ميجابايت.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setLogoUrl(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveLogo = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLogoUrl('');
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    const updatedSettings: CompanySettings = {
+      companyName: companyName || 'شركة جديدة',
+      taxNumber: taxNumber || '',
+      commercialRecord: crNumber || '',
+      overtimeRateMultiplier: companySettings?.overtimeRateMultiplier || 1.5,
+      gosiEmployeePercent: typeof gosiRate === 'number' ? gosiRate : Number(gosiRate) || 11,
+      enableSmartGuard: companySettings?.enableSmartGuard ?? true,
+      currencySymbol: currencySymbol || 'ج.م',
+      workDaysPerMonth: companySettings?.workDaysPerMonth || 30,
+      logoUrl: logoUrl || undefined,
+    };
+
+    if (onUpdateCompanySettings) {
+      onUpdateCompanySettings(updatedSettings);
+    }
+
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
   };
@@ -80,14 +136,59 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           <div className="space-y-3">
-            <div className="flex flex-col items-center gap-4 py-4 border-b border-slate-100 dark:border-slate-700">
-               <div className="w-24 h-24 rounded-2xl bg-slate-50 dark:bg-slate-900 border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center overflow-hidden relative">
+            <div className="flex flex-col sm:flex-row items-center gap-4 py-4 border-b border-slate-100 dark:border-slate-700">
+              <div className="w-24 h-24 rounded-2xl bg-slate-50 dark:bg-slate-900 border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center overflow-hidden relative group">
+                {logoUrl ? (
+                  <img
+                    src={logoUrl}
+                    alt="شعار الشركة"
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-contain p-1.5"
+                  />
+                ) : (
                   <div className="text-center p-2 text-slate-400">
-                     <Building2 className="w-8 h-8 mx-auto mb-1 opacity-50" />
-                     <span className="text-[9px]">شعار الشركة</span>
+                    <Building2 className="w-8 h-8 mx-auto mb-1 opacity-50 text-blue-500" />
+                    <span className="text-[9px] font-bold block">شعار الشركة</span>
                   </div>
-                  <input type="file" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" accept="image/*" />
-               </div>
+                )}
+                <input
+                  type="file"
+                  onChange={handleLogoUpload}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  accept="image/*"
+                  title="اختر صورة شعار المنشأة"
+                />
+              </div>
+
+              <div className="space-y-1.5 text-center sm:text-right flex-1">
+                <div className="flex items-center gap-2 justify-center sm:justify-start">
+                  <label className="px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-bold text-xs hover:bg-blue-100 cursor-pointer flex items-center gap-1.5 transition-colors">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>{logoUrl ? 'تغيير الشعار' : 'رفع شعار المنشأة'}</span>
+                    <input
+                      type="file"
+                      onChange={handleLogoUpload}
+                      className="hidden"
+                      accept="image/*"
+                    />
+                  </label>
+
+                  {logoUrl && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveLogo}
+                      className="px-2.5 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 hover:bg-rose-100 font-bold text-xs flex items-center gap-1 cursor-pointer"
+                      title="حذف الشعار"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>حذف</span>
+                    </button>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  يظهر الشعار في أعلى الشهادات التدريبية المعتمدة ومسيرات الرواتب والتقارير الرسمية (PNG / JPG / SVG).
+                </p>
+              </div>
             </div>
             
             <div>
@@ -145,17 +246,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               >
                 <option value="ج.م">جنيه مصري (ج.م)</option>
               </select>
-            </div>
-
-            <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">فترة السماح الافتراضية قبل احتساب التأخير (بالدقائق)</label>
-              <input
-                type="number"
-                value={gracePeriod}
-                onChange={(e) => setGracePeriod(e.target.value === '' ? '' : Number(e.target.value))}
-                placeholder="أدخل فترة السماح بالدقائق..."
-                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold text-amber-600"
-              />
             </div>
 
             <div>

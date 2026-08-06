@@ -17,7 +17,8 @@ import {
   Sun,
   Database,
   FileCheck,
-  LogOut
+  LogOut,
+  GraduationCap
 } from 'lucide-react';
 import { TabType } from '../types';
 
@@ -88,6 +89,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Activity,
     },
     {
+      id: 'training' as TabType,
+      label: 'إدارة التدريب',
+      icon: GraduationCap,
+    },
+    {
       id: 'attendance' as TabType,
       label: 'الحضور والانصراف',
       icon: Clock,
@@ -110,7 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'reports' as TabType,
-      label: 'التقارير التنفيذية',
+      label: 'التقارير التنفيذية KPIs',
       icon: BarChart3,
     },
     {
@@ -138,20 +144,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
     >
       {/* Brand Header */}
       <div
-        className="flex items-center justify-between h-20 px-4 border-b border-slate-100 dark:border-slate-800"
+        className={`flex items-center ${
+          isCollapsed ? 'flex-col justify-center gap-1.5 py-3 px-1' : 'justify-between px-4'
+        } h-20 border-b border-slate-100 dark:border-slate-800 transition-all`}
       >
-        <div className="flex items-center gap-3 overflow-hidden">
+        <div className="flex items-center gap-3 overflow-hidden justify-center">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-blue-500 flex items-center justify-center shadow-sm shadow-blue-500/20 shrink-0">
             <ShieldCheck className="w-6 h-6 text-white" />
           </div>
           {!isCollapsed && (
-            <div className="flex flex-col">
+            <div className="flex flex-col min-w-0">
               <span
-                className="font-extrabold text-xl tracking-tight text-slate-900 dark:text-white"
+                className="font-extrabold text-xl tracking-tight text-slate-900 dark:text-white truncate"
               >
                 Smart HR
               </span>
-              <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">
+              <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold truncate">
                 نظام الموارد البشرية
               </span>
             </div>
@@ -161,11 +169,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           id="collapse-sidebar-btn"
           onClick={toggleCollapsed}
-          className="p-1.5 rounded-lg transition-colors text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+          className={`p-1.5 rounded-lg transition-colors text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 ${
+            isCollapsed ? 'mt-0.5' : ''
+          }`}
           title={isCollapsed ? 'توسيع القائمة' : 'طَي القائمة'}
         >
           {isCollapsed ? (
-            <ChevronLeft className="w-5 h-5 rtl:rotate-180" />
+            <ChevronLeft className="w-4 h-4 rtl:rotate-180" />
           ) : (
             <ChevronRight className="w-5 h-5 rtl:rotate-180" />
           )}

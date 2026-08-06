@@ -1,6 +1,7 @@
 export type TabType =
   | 'dashboard'
   | 'employees'
+  | 'training'
   | 'attendance'
   | 'payroll'
   | 'loans-assets'
@@ -37,7 +38,7 @@ export interface Employee {
   bankName: string;
 }
 
-export type AttendanceStatus = 'present' | 'absent' | 'late' | 'leave' | 'early_leave' | 'sick_leave' | 'casual_leave' | 'annual_leave' | 'mission';
+export type AttendanceStatus = 'present' | 'absent' | 'late' | 'leave' | 'early_leave' | 'sick_leave' | 'casual_leave' | 'annual_leave' | 'mission' | 'work_injury';
 
 export interface AttendanceRecord {
   id: string;
@@ -151,10 +152,10 @@ export interface CompanySettings {
   commercialRecord: string;
   overtimeRateMultiplier: number; // e.g. 1.5
   gosiEmployeePercent: number; // e.g. 9.75%
-  lateGraceMinutes: number; // e.g. 15 mins
   enableSmartGuard: boolean;
   currencySymbol: string; // "ج.م"
   workDaysPerMonth: number; // e.g. 22 or 30
+  logoUrl?: string; // Company logo data URL or path
 }
 
 export interface DocumentItem {
@@ -169,3 +170,74 @@ export interface DocumentItem {
   description?: string;
   fileUrl?: string;
 }
+
+export interface MonthlyTurnoverRecord {
+  monthKey: string; // e.g. "01", "02" ... "12"
+  monthName: string; // e.g. "يناير"
+  quarter: 'Q1' | 'Q2' | 'Q3' | 'Q4';
+  hires: number;
+  departures: number; // Resignations or terminations
+  activeCount: number;
+  turnoverRate?: number; // percentage
+  primaryReason?: string;
+  notes?: string;
+}
+
+export interface KpiSettings {
+  targetMaxTurnoverRate: number; // e.g. 10%
+  selectedYear: number;
+  customTurnoverData?: Record<string, MonthlyTurnoverRecord>;
+  customDeptQuotas?: Record<string, number>;
+}
+
+export type TrainingType = 'internal' | 'external' | 'online';
+export type CourseStatus = 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
+export type NominationStatus = 'pending' | 'approved' | 'rejected';
+export type AttendanceGrade = 'present' | 'absent' | 'completed';
+
+export interface TrainingCourse {
+  id: string;
+  code: string; // e.g. "TRN-101"
+  title: string;
+  description: string;
+  instructor: string;
+  targetRole: string; // الوصف / المسمى الوظيفي المستهدف
+  department?: string; // القسم المستهدف أو "كافة الأقسام"
+  type: TrainingType; // 'internal' | 'external' | 'online'
+  status: CourseStatus; // 'upcoming' | 'ongoing' | 'completed' | 'cancelled'
+  maxParticipants: number;
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  durationHours: number;
+  locationOrLink?: string; // مكان التدريب أو رابط المنصة
+  costPerParticipant?: number;
+  objectives?: string[];
+  createdDate: string;
+}
+
+export interface TrainingNomination {
+  id: string;
+  courseId: string;
+  courseTitle: string;
+  employeeId: string;
+  employeeName: string;
+  employeeCode?: string;
+  department: string;
+  position: string;
+  nominatedBy: string; // جهة / شخص الترشيح (مثلاً: مدير القسم أو الموارد البشرية)
+  nominationDate: string; // YYYY-MM-DD
+  status: NominationStatus; // 'pending' | 'approved' | 'rejected'
+  rejectionReason?: string;
+  // Attendance & Evaluation tracking
+  attendanceRate: number; // 0 - 100%
+  attendanceStatus: AttendanceGrade; // 'present' | 'absent' | 'completed'
+  completedDate?: string;
+  // Post-course evaluation
+  employeeScore?: number; // 1-5 rating (مستوى الاستفادة)
+  instructorRating?: number; // 1-5 rating (تقييم المدرب)
+  courseContentRating?: number; // 1-5 rating (تقييم المحتوى)
+  evaluationNotes?: string; // ملاحظات وتوصيات التقييم
+  passed?: boolean; // هل اجتاز الدورة
+  certificateIssued?: boolean;
+}
+

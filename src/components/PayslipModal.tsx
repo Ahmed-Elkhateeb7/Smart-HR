@@ -132,7 +132,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({
                 تاريخ الإصدار:
               </span>
               <span className="font-bold text-slate-800">
-                {payrollRecord.approvalDate || "2026-07-26"}
+                {payrollRecord.approvalDate || new Date().toISOString().split('T')[0]}
               </span>
             </div>
           </div>

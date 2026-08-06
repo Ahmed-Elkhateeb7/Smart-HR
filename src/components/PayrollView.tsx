@@ -38,6 +38,8 @@ interface PayrollViewProps {
   payrollRecords: PayrollRecord[];
   employees?: Employee[];
   departments?: Department[];
+  searchTerm?: string;
+  setSearchTerm?: (term: string) => void;
   onApprovePayroll: (month: string) => void;
   onUpdatePayrollRecord?: (updatedRec: PayrollRecord) => void;
   onGeneratePayroll?: (month: string) => void;
@@ -48,13 +50,21 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
   payrollRecords,
   employees = [],
   departments: deptList = [],
+  searchTerm,
+  setSearchTerm,
   onApprovePayroll,
   onUpdatePayrollRecord,
   onGeneratePayroll,
   currencySymbol,
 }) => {
   const [selectedMonth, setSelectedMonth] = useState<string>("2026-07");
-  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState<string>(searchTerm || "");
+
+  useEffect(() => {
+    if (searchTerm !== undefined && searchTerm !== searchQuery) {
+      setSearchQuery(searchTerm);
+    }
+  }, [searchTerm]);
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
   const [isSpreadsheetMode, setIsSpreadsheetMode] = useState<boolean>(false);
   const [activeTableTab, setActiveTableTab] = useState<'main' | 'overtime'>('main');

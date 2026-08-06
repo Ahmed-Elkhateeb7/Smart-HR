@@ -6,7 +6,12 @@ import {
   Asset,
   SystemAlert,
   Shift,
-  DocumentItem
+  DocumentItem,
+  CompanySettings,
+  Department,
+  KpiSettings,
+  TrainingCourse,
+  TrainingNomination
 } from '../types';
 
 import {
@@ -17,7 +22,10 @@ import {
   initialAssets,
   initialSystemAlerts,
   initialShifts,
-  initialCompanySettings
+  initialDepartments,
+  initialCompanySettings,
+  initialTrainingCourses,
+  initialTrainingNominations
 } from '../data/initialData';
 
 export const STORAGE_KEYS = {
@@ -30,6 +38,11 @@ export const STORAGE_KEYS = {
   SHIFTS: 'hr_app_shifts_v1',
   DOCUMENTS: 'hr_app_documents_v1',
   CURRENCY: 'hr_app_currency_v1',
+  COMPANY_SETTINGS: 'hr_app_company_settings_v1',
+  DEPARTMENTS: 'hr_app_departments_v1',
+  KPI_SETTINGS: 'hr_app_kpi_settings_v1',
+  TRAINING_COURSES: 'hr_app_training_courses_v1',
+  TRAINING_NOMINATIONS: 'hr_app_training_nominations_v1',
 };
 
 // Safe JSON parser
@@ -78,9 +91,59 @@ function deduplicateEmployees(emps: Employee[]): Employee[] {
   return Array.from(map.values());
 }
 
+const DUMMY_MANAGERS = new Set([
+  'م. أحمد علي', 'أ. سارة محمود', 'أ. كريم حسن', 'أ. طارق عبدالفتاح',
+  'م. خالد مصطفى', 'د. محمد إبراهيم', 'أ. محمود سامي', 'م. ياسمين نبيل',
+  'أ. حسن السيد', 'أ. عمر الخولي', 'مدير القسم'
+]);
+
+function cleanDepartments(depts: Department[]): Department[] {
+  if (!Array.isArray(depts)) return initialDepartments;
+  return depts.map((d) => {
+    const isDummy = d.managerName && DUMMY_MANAGERS.has(d.managerName.trim());
+    return {
+      ...d,
+      managerName: isDummy ? '' : (d.managerName || ''),
+      monthlyBudget: isDummy && [150000, 80000, 120000, 95000, 70000, 200000, 65000, 75000, 85000, 90000, 50000].includes(d.monthlyBudget)
+        ? 0
+        : (d.monthlyBudget || 0),
+    };
+  });
+}
+
+const DUMMY_COURSE_IDS = new Set(['trn-c-1', 'trn-c-2', 'trn-c-3']);
+const DUMMY_NOMINATION_IDS = new Set(['trn-nom-1', 'trn-nom-2', 'trn-nom-3']);
+
+function cleanTrainingCourses(courses: TrainingCourse[]): TrainingCourse[] {
+  if (!Array.isArray(courses)) return [];
+  return courses.filter((c) => c && !DUMMY_COURSE_IDS.has(c.id));
+}
+
+function cleanTrainingNominations(nominations: TrainingNomination[]): TrainingNomination[] {
+  if (!Array.isArray(nominations)) return [];
+  return nominations.filter(
+    (n) => n && !DUMMY_NOMINATION_IDS.has(n.id) && !DUMMY_COURSE_IDS.has(n.courseId)
+  );
+}
+
 // Load all initial state
 export function loadAllState() {
   const loadedEmps = safeParse<Employee[]>(STORAGE_KEYS.EMPLOYEES, initialEmployees);
+  const loadedDepts = safeParse<Department[]>(STORAGE_KEYS.DEPARTMENTS, initialDepartments);
+  const loadedCourses = safeParse<TrainingCourse[]>(STORAGE_KEYS.TRAINING_COURSES, initialTrainingCourses);
+  const loadedNominations = safeParse<TrainingNomination[]>(STORAGE_KEYS.TRAINING_NOMINATIONS, initialTrainingNominations);
+
+  const cleanedCourses = cleanTrainingCourses(loadedCourses);
+  const cleanedNominations = cleanTrainingNominations(loadedNominations);
+
+  // If dummy items were removed, sync to localStorage
+  if (loadedCourses.length !== cleanedCourses.length) {
+    safeSave(STORAGE_KEYS.TRAINING_COURSES, cleanedCourses);
+  }
+  if (loadedNominations.length !== cleanedNominations.length) {
+    safeSave(STORAGE_KEYS.TRAINING_NOMINATIONS, cleanedNominations);
+  }
+
   return {
     employees: deduplicateEmployees(loadedEmps),
     attendanceRecords: safeParse<AttendanceRecord[]>(STORAGE_KEYS.ATTENDANCE, initialAttendanceRecords),
@@ -91,12 +154,25 @@ export function loadAllState() {
     shifts: safeParse<Shift[]>(STORAGE_KEYS.SHIFTS, initialShifts),
     documents: safeParse<DocumentItem[]>(STORAGE_KEYS.DOCUMENTS, []),
     currencySymbol: safeParse<string>(STORAGE_KEYS.CURRENCY, initialCompanySettings.currencySymbol),
+    companySettings: safeParse<CompanySettings>(STORAGE_KEYS.COMPANY_SETTINGS, initialCompanySettings),
+    departments: cleanDepartments(loadedDepts),
+    kpiSettings: safeParse<KpiSettings | null>(STORAGE_KEYS.KPI_SETTINGS, null),
+    trainingCourses: cleanedCourses,
+    trainingNominations: cleanedNominations,
   };
 }
 
 // Save state functions
 export function saveEmployees(employees: Employee[]) {
   safeSave(STORAGE_KEYS.EMPLOYEES, employees);
+}
+
+export function saveDepartments(departments: Department[]) {
+  safeSave(STORAGE_KEYS.DEPARTMENTS, departments);
+}
+
+export function saveKpiSettings(settings: KpiSettings) {
+  safeSave(STORAGE_KEYS.KPI_SETTINGS, settings);
 }
 
 export function saveAttendanceRecords(records: AttendanceRecord[]) {
@@ -131,6 +207,18 @@ export function saveCurrencySymbol(currencySymbol: string) {
   safeSave(STORAGE_KEYS.CURRENCY, currencySymbol);
 }
 
+export function saveCompanySettings(settings: CompanySettings) {
+  safeSave(STORAGE_KEYS.COMPANY_SETTINGS, settings);
+}
+
+export function saveTrainingCourses(courses: TrainingCourse[]) {
+  safeSave(STORAGE_KEYS.TRAINING_COURSES, courses);
+}
+
+export function saveTrainingNominations(nominations: TrainingNomination[]) {
+  safeSave(STORAGE_KEYS.TRAINING_NOMINATIONS, nominations);
+}
+
 // Calculate storage size in MB
 export function calculateStorageSizeMB(): number {
   let totalBytes = 0;
@@ -159,6 +247,8 @@ export interface BackupDataFormat {
     shifts?: Shift[];
     documents?: DocumentItem[];
     currencySymbol?: string;
+    trainingCourses?: TrainingCourse[];
+    trainingNominations?: TrainingNomination[];
   };
 }
 
@@ -173,6 +263,8 @@ export function createBackupPayload(state: {
   shifts: Shift[];
   documents: DocumentItem[];
   currencySymbol: string;
+  trainingCourses?: TrainingCourse[];
+  trainingNominations?: TrainingNomination[];
 }): BackupDataFormat {
   return {
     version: 'HR-SYSTEM-DATABASE-v2.0',
@@ -188,6 +280,8 @@ export function createBackupPayload(state: {
       shifts: state.shifts,
       documents: state.documents,
       currencySymbol: state.currencySymbol,
+      trainingCourses: state.trainingCourses,
+      trainingNominations: state.trainingNominations,
     }
   };
 }
@@ -206,6 +300,8 @@ export function parseAndRestoreBackup(jsonString: string): {
     shifts: Shift[];
     documents: DocumentItem[];
     currencySymbol: string;
+    trainingCourses?: TrainingCourse[];
+    trainingNominations?: TrainingNomination[];
   };
 } {
   try {
@@ -227,9 +323,11 @@ export function parseAndRestoreBackup(jsonString: string): {
     const shifts = Array.isArray(rawData.shifts) ? rawData.shifts : (Array.isArray(parsed.shifts) ? parsed.parsedShifts : undefined);
     const documents = Array.isArray(rawData.documents) ? rawData.documents : (Array.isArray(parsed.documents) ? parsed.documents : undefined);
     const currencySymbol = typeof rawData.currencySymbol === 'string' ? rawData.currencySymbol : (typeof parsed.currencySymbol === 'string' ? parsed.currencySymbol : undefined);
+    const trainingCourses = Array.isArray(rawData.trainingCourses) ? rawData.trainingCourses : (Array.isArray(parsed.trainingCourses) ? parsed.trainingCourses : undefined);
+    const trainingNominations = Array.isArray(rawData.trainingNominations) ? rawData.trainingNominations : (Array.isArray(parsed.trainingNominations) ? parsed.trainingNominations : undefined);
 
     // If none of the main tables exist
-    if (!employees && !attendanceRecords && !payrollRecords && !loans && !assets) {
+    if (!employees && !attendanceRecords && !payrollRecords && !loans && !assets && !trainingCourses) {
       return {
         success: false,
         message: 'عذراً، الملف المرفق لا يحتوي على الجداول الرئيسية للنظام (الموظفين، المرتبات، الحضور...).'
@@ -249,6 +347,8 @@ export function parseAndRestoreBackup(jsonString: string): {
       shifts: shifts || current.shifts,
       documents: documents || current.documents,
       currencySymbol: currencySymbol || current.currencySymbol,
+      trainingCourses: trainingCourses || current.trainingCourses,
+      trainingNominations: trainingNominations || current.trainingNominations,
     };
 
     // Save to localStorage immediately
@@ -261,6 +361,8 @@ export function parseAndRestoreBackup(jsonString: string): {
     saveShifts(restored.shifts);
     saveDocuments(restored.documents);
     saveCurrencySymbol(restored.currencySymbol);
+    if (restored.trainingCourses) saveTrainingCourses(restored.trainingCourses);
+    if (restored.trainingNominations) saveTrainingNominations(restored.trainingNominations);
 
     const counts = [
       restored.employees ? `${restored.employees.length} موظف` : null,
@@ -268,6 +370,7 @@ export function parseAndRestoreBackup(jsonString: string): {
       restored.attendanceRecords ? `${restored.attendanceRecords.length} سجل حضور` : null,
       restored.loans ? `${restored.loans.length} سلفة` : null,
       restored.assets ? `${restored.assets.length} أصل/عهدة` : null,
+      restored.trainingCourses ? `${restored.trainingCourses.length} دورة تدريبية` : null,
     ].filter(Boolean).join('، ');
 
     return {

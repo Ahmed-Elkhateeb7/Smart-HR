@@ -12,7 +12,8 @@ import {
   DollarSign,
   Calendar,
   Briefcase,
-  Check
+  Check,
+  GraduationCap
 } from 'lucide-react';
 import {
   Employee,
@@ -22,7 +23,9 @@ import {
   Asset,
   SystemAlert,
   Shift,
-  DocumentItem
+  DocumentItem,
+  TrainingCourse,
+  TrainingNomination
 } from '../types';
 import {
   createBackupPayload,
@@ -41,6 +44,8 @@ interface DatabaseViewProps {
   shifts: Shift[];
   documents: DocumentItem[];
   currencySymbol: string;
+  trainingCourses?: TrainingCourse[];
+  trainingNominations?: TrainingNomination[];
   onRestoreData: (restoredData: {
     employees: Employee[];
     attendanceRecords: AttendanceRecord[];
@@ -51,6 +56,8 @@ interface DatabaseViewProps {
     shifts: Shift[];
     documents: DocumentItem[];
     currencySymbol: string;
+    trainingCourses?: TrainingCourse[];
+    trainingNominations?: TrainingNomination[];
   }) => void;
   onClearData: () => void;
 }
@@ -65,6 +72,8 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
   shifts,
   documents,
   currencySymbol,
+  trainingCourses = [],
+  trainingNominations = [],
   onRestoreData,
   onClearData
 }) => {
@@ -94,7 +103,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
       alerts,
       shifts,
       documents,
-      currencySymbol
+      currencySymbol,
+      trainingCourses,
+      trainingNominations
     });
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -238,13 +249,21 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
           </div>
 
           {/* Table Counters Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-6">
             <div className="p-3.5 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-700/60 text-center">
               <div className="flex items-center justify-center gap-1.5 text-blue-600 mb-1">
                 <Users className="w-4 h-4" />
                 <span className="text-xs font-bold text-slate-600 dark:text-slate-300">الموظفين</span>
               </div>
               <p className="text-lg font-extrabold text-slate-900 dark:text-white">{employees.length}</p>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-700/60 text-center">
+              <div className="flex items-center justify-center gap-1.5 text-purple-600 mb-1">
+                <GraduationCap className="w-4 h-4" />
+                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">الدورات</span>
+              </div>
+              <p className="text-lg font-extrabold text-slate-900 dark:text-white">{trainingCourses.length}</p>
             </div>
 
             <div className="p-3.5 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-700/60 text-center">
@@ -263,7 +282,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
               <p className="text-lg font-extrabold text-slate-900 dark:text-white">{attendanceRecords.length}</p>
             </div>
 
-            <div className="p-3.5 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-700/60 text-center">
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-slate-700/60 text-center col-span-2 sm:col-span-1">
               <div className="flex items-center justify-center gap-1.5 text-indigo-600 mb-1">
                 <FileText className="w-4 h-4" />
                 <span className="text-xs font-bold text-slate-600 dark:text-slate-300">السُلف والعهد</span>
