@@ -36,6 +36,17 @@ export interface Employee {
   status: EmployeeStatus;
   bankAccount: string;
   bankName: string;
+  // New Egyptian / HR Standard Fields
+  birthDate?: string; // تاريخ الميلاد (YYYY-MM-DD)
+  nationalId?: string; // الرقم القومي (14 رقم)
+  insuranceNumber?: string; // الرقم التأميني
+  insuranceStatus?: 'خاضع للتأمين' | 'غير خاضع' | 'معفى' | string; // التأمينات
+  employeeInsuranceShare?: number; // حصة العامل (تأمينات)
+  employerInsuranceShare?: number; // حصة صاحب العمل (تأمينات)
+  taxAmount?: number; // الضريبة المستقطعة
+  militaryStatus?: 'أدى الخدمة' | 'معفى نهائي' | 'معفى مؤقت' | 'غير مطلوب' | 'مؤجل' | string; // موقف الخدمة العسكرية
+  maritalStatus?: 'أعزب' | 'متزوج' | 'متزوج ويعول' | 'مطلق' | 'أرمل' | string; // الحالة الاجتماعية
+  address?: string; // العنوان
 }
 
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'leave' | 'early_leave' | 'sick_leave' | 'casual_leave' | 'annual_leave' | 'mission' | 'work_injury';

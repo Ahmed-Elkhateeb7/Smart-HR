@@ -164,18 +164,32 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
       worksheet.columns = [
         { header: 'الكود الوظيفي', key: 'code', width: 16 },
         { header: 'اسم الموظف', key: 'name', width: 28 },
+        { header: 'الرقم القومي', key: 'nationalId', width: 20 },
+        { header: 'تاريخ الميلاد', key: 'birthDate', width: 16 },
+        { header: 'تاريخ التعيين', key: 'joinDate', width: 16 },
+        { header: 'الحالة الاجتماعية', key: 'maritalStatus', width: 18 },
+        { header: 'الخدمة العسكرية', key: 'militaryStatus', width: 20 },
+        { header: 'العنوان', key: 'address', width: 28 },
+        { header: 'التليفون', key: 'phone', width: 18 },
         { header: 'القسم', key: 'department', width: 26 },
         { header: 'الوظيفة', key: 'position', width: 24 },
         { header: 'الراتب الأساسي', key: 'baseSalary', width: 18 },
         { header: 'الحافز', key: 'incentive', width: 15 },
         { header: 'البدلات', key: 'allowances', width: 15 },
+        { header: 'التأمينات', key: 'insuranceStatus', width: 18 },
+        { header: 'الرقم التأميني', key: 'insuranceNumber', width: 18 },
+        { header: 'حصة العامل', key: 'employeeInsuranceShare', width: 16 },
+        { header: 'حصة صاحب العمل', key: 'employerInsuranceShare', width: 18 },
+        { header: 'الضريبة', key: 'taxAmount', width: 16 },
+        { header: 'اسم البنك', key: 'bankName', width: 20 },
+        { header: 'رقم الحساب البنكي', key: 'bankAccount', width: 24 },
         { header: 'صلاحية الهوية', key: 'idExpiry', width: 18 },
         { header: 'الحالة', key: 'status', width: 16 },
       ];
 
       // Style Main Header Row
       const headerRow = worksheet.getRow(1);
-      headerRow.height = 30;
+      headerRow.height = 32;
       headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11, name: 'Segoe UI' };
       headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
       headerRow.fill = {
@@ -184,38 +198,80 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
         fgColor: { argb: 'FF1E3A8A' }, // Deep Navy / Slate
       };
 
-      // Sample Data - all 3 rows strictly using the official 10 departments
+      // Sample Data - all 3 rows strictly using the official 10 departments and comprehensive fields
       const sampleData = [
         {
           code: '101',
           name: 'أحمد محمد علي',
+          nationalId: '29205141234567',
+          birthDate: '1992-05-14',
+          joinDate: '2022-01-01',
+          maritalStatus: 'متزوج',
+          militaryStatus: 'أدى الخدمة',
+          address: 'القاهرة - المعادي - شارع النصر',
+          phone: '01012345678',
           department: 'تكنولوجيا المعلومات',
           position: 'مطور برمجيات',
           baseSalary: 5000,
           incentive: 500,
           allowances: 750,
+          insuranceStatus: 'خاضع للتأمين',
+          insuranceNumber: '78945612',
+          employeeInsuranceShare: 550,
+          employerInsuranceShare: 937.5,
+          taxAmount: 250,
+          bankName: 'البنك الأهلي المصري',
+          bankAccount: 'EG1200030000123456789012',
           idExpiry: '2028-12-31',
           status: 'نشط',
         },
         {
           code: '102',
           name: 'سارة محمود عبدالله',
+          nationalId: '29508201234568',
+          birthDate: '1995-08-20',
+          joinDate: '2023-03-15',
+          maritalStatus: 'عزباء',
+          militaryStatus: 'غير مطلوب',
+          address: 'الجيزة - الدقي - شارع التحرير',
+          phone: '01123456789',
           department: 'الموارد البشرية',
           position: 'أخصائي توظيف',
           baseSalary: 4500,
           incentive: 400,
           allowances: 500,
+          insuranceStatus: 'خاضع للتأمين',
+          insuranceNumber: '89123456',
+          employeeInsuranceShare: 495,
+          employerInsuranceShare: 843.75,
+          taxAmount: 180,
+          bankName: 'بنك مصر',
+          bankAccount: 'EG4500020000987654321098',
           idExpiry: '2027-06-15',
           status: 'نشط',
         },
         {
           code: '103',
-          name: 'خالد إبراهيم',
+          name: 'خالد إبراهيم حسن',
+          nationalId: '28911101234569',
+          birthDate: '1989-11-10',
+          joinDate: '2021-08-01',
+          maritalStatus: 'متزوج ويعول',
+          militaryStatus: 'معفى نهائي',
+          address: 'الإسكندرية - سموحة',
+          phone: '01234567890',
           department: 'المالية والمحاسبة',
           position: 'محاسب عام',
           baseSalary: 4800,
           incentive: 300,
           allowances: 600,
+          insuranceStatus: 'خاضع للتأمين',
+          insuranceNumber: '92345678',
+          employeeInsuranceShare: 528,
+          employerInsuranceShare: 900,
+          taxAmount: 210,
+          bankName: 'البنك التجاري الدولي CIB',
+          bankAccount: 'EG7800040000567890123456',
           idExpiry: '2026-11-20',
           status: 'إجازة',
         },
@@ -229,14 +285,18 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
       });
 
       // Number formatting for numeric columns
-      worksheet.getColumn('E').numFmt = '#,##0';
-      worksheet.getColumn('F').numFmt = '#,##0';
-      worksheet.getColumn('G').numFmt = '#,##0';
+      worksheet.getColumn('L').numFmt = '#,##0';
+      worksheet.getColumn('M').numFmt = '#,##0';
+      worksheet.getColumn('N').numFmt = '#,##0';
+      worksheet.getColumn('Q').numFmt = '#,##0.00';
+      worksheet.getColumn('R').numFmt = '#,##0.00';
+      worksheet.getColumn('S').numFmt = '#,##0.00';
 
-      // Set Data Validation Dropdown for Department column (C) from C2 to C1000
+      // Set Data Validation Dropdown for Department column (J) from J2 to J1000
       const lastDeptRow = deptNames.length + 1;
       for (let r = 2; r <= 1000; r++) {
-        const deptCell = worksheet.getCell(`C${r}`);
+        // Department Dropdown (J)
+        const deptCell = worksheet.getCell(`J${r}`);
         deptCell.dataValidation = {
           type: 'list',
           allowBlank: true,
@@ -249,8 +309,41 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
           error: 'يرجى اختيار قسم من القائمة المنسدلة فقط لضمان مطابقة بيانات الأقسام في النظام.',
         };
 
-        // Status Dropdown (I)
-        const statusCell = worksheet.getCell(`I${r}`);
+        // Marital Status Dropdown (F)
+        const maritalCell = worksheet.getCell(`F${r}`);
+        maritalCell.dataValidation = {
+          type: 'list',
+          allowBlank: true,
+          formulae: ['"أعزب,عزباء,متزوج,متزوجة,متزوج ويعول,مطلق,مطلقة,أرمل,أرملة"'],
+          showInputMessage: true,
+          promptTitle: 'الحالة الاجتماعية',
+          prompt: 'اختر الحالة الاجتماعية (أعزب، متزوج، متزوج ويعول، مطلق، أرمل)',
+        };
+
+        // Military Status Dropdown (G)
+        const militaryCell = worksheet.getCell(`G${r}`);
+        militaryCell.dataValidation = {
+          type: 'list',
+          allowBlank: true,
+          formulae: ['"أدى الخدمة,معفى نهائي,معفى مؤقت,غير مطلوب,مؤجل"'],
+          showInputMessage: true,
+          promptTitle: 'الخدمة العسكرية',
+          prompt: 'اختر موقف الخدمة العسكرية (أدى الخدمة، معفى نهائي، معفى مؤقت، غير مطلوب، مؤجل)',
+        };
+
+        // Insurance Status Dropdown (O)
+        const insuranceCell = worksheet.getCell(`O${r}`);
+        insuranceCell.dataValidation = {
+          type: 'list',
+          allowBlank: true,
+          formulae: ['"خاضع للتأمين,غير خاضع,معفى"'],
+          showInputMessage: true,
+          promptTitle: 'التأمينات',
+          prompt: 'اختر حالة التأمينات (خاضع للتأمين، غير خاضع، معفى)',
+        };
+
+        // Status Dropdown (W)
+        const statusCell = worksheet.getCell(`W${r}`);
         statusCell.dataValidation = {
           type: 'list',
           allowBlank: true,
@@ -313,6 +406,13 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
         rows.forEach((row, idx) => {
           let name = '';
           let employeeCode = '';
+          let nationalId = '';
+          let birthDate = '';
+          let joinDate = '';
+          let maritalStatus = '';
+          let militaryStatus = '';
+          let address = '';
+          let phone = '';
           let department = 'عام';
           let position = 'موظف';
           let baseSalary = 0;
@@ -320,6 +420,13 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
           let allowancesVal = 0;
           let housingVal = 0;
           let transportVal = 0;
+          let insuranceStatus = 'خاضع للتأمين';
+          let insuranceNumber = '';
+          let employeeInsuranceShare = 0;
+          let employerInsuranceShare = 0;
+          let taxAmount = 0;
+          let bankName = '';
+          let bankAccount = '';
           let iqamaExpiryDate = '';
           let statusStr = '';
 
@@ -328,10 +435,24 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
             const v = String(val !== undefined && val !== null ? val : '').trim();
             if (!v) continue;
 
-            if ((k.includes('اسم') || k.includes('name') || k.includes('موظف')) && !k.includes('كود') && !k.includes('رقم') && !k.includes('حالة')) {
+            if ((k.includes('اسم') || k.includes('name') || k.includes('موظف')) && !k.includes('كود') && !k.includes('رقم') && !k.includes('حالة') && !k.includes('بنك')) {
               name = v;
             } else if (k.includes('كود') || k.includes('رقموظيفي') || k.includes('الكود') || k.includes('code') || k === 'id') {
               employeeCode = v;
+            } else if (k.includes('قومي') || k.includes('national') || k.includes('بطاق') || k.includes('رقمقومي')) {
+              nationalId = v;
+            } else if (k.includes('ميلاد') || k.includes('birth') || k.includes('dob')) {
+              birthDate = parseExcelDate(val);
+            } else if (k.includes('تعيين') || k.includes('تعين') || k.includes('join') || k.includes('hire') || k.includes('التحاق')) {
+              joinDate = parseExcelDate(val);
+            } else if (k.includes('اجتماع') || k.includes('marital') || k.includes('زوج') || k.includes('أعزب') || k.includes('اعزب')) {
+              maritalStatus = v;
+            } else if (k.includes('عسكر') || k.includes('تجنيد') || k.includes('military') || k.includes('جيش') || k.includes('خدمة')) {
+              militaryStatus = v;
+            } else if (k.includes('عنوان') || k.includes('سكن') || k.includes('اقامة') || k.includes('اقام') || k.includes('address') || k.includes('محل')) {
+              address = v;
+            } else if (k.includes('هاتف') || k.includes('تليفون') || k.includes('موبايل') || k.includes('جوال') || k.includes('phone') || k.includes('mobile') || k.includes('tel')) {
+              phone = v;
             } else if (k.includes('قسم') || k.includes('department') || k.includes('dept')) {
               department = v;
             } else if (k.includes('وظيفة') || k.includes('مسمى') || k.includes('position') || k.includes('title') || k.includes('job')) {
@@ -351,6 +472,23 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
             } else if (k.includes('بدل') || k.includes('allowance')) {
               const num = parseFloat(v.replace(/[^0-9.]/g, ''));
               if (!isNaN(num)) allowancesVal = num;
+            } else if (k.includes('حصةالعامل') || k.includes('حصهالعامل') || k.includes('تامينالعامل') || k.includes('تأمينالعامل') || k.includes('employeeshare')) {
+              const num = parseFloat(v.replace(/[^0-9.]/g, ''));
+              if (!isNaN(num)) employeeInsuranceShare = num;
+            } else if (k.includes('حصةصاحبالعمل') || k.includes('حصهصاحبالعمل') || k.includes('حصةالشركة') || k.includes('حصهالشركة') || k.includes('تامينالمنشأة') || k.includes('employershare')) {
+              const num = parseFloat(v.replace(/[^0-9.]/g, ''));
+              if (!isNaN(num)) employerInsuranceShare = num;
+            } else if (k.includes('ضريب') || k.includes('ضرائب') || k.includes('tax') || k.includes('كسبالعمل')) {
+              const num = parseFloat(v.replace(/[^0-9.]/g, ''));
+              if (!isNaN(num)) taxAmount = num;
+            } else if (k.includes('رقم') && (k.includes('تامين') || k.includes('تأمين') || k.includes('insurance'))) {
+              insuranceNumber = v;
+            } else if (k.includes('تامين') || k.includes('تأمين') || k.includes('خاضع') || k === 'التأمينات' || k === 'التامينات') {
+              insuranceStatus = v;
+            } else if ((k.includes('اسم') && (k.includes('بنك') || k.includes('bank'))) || k === 'البنك' || k === 'بنك' || k === 'bank') {
+              bankName = v;
+            } else if (k.includes('حساب') || k.includes('iban') || k.includes('آيبان') || k.includes('ايبان') || k.includes('account') || k.includes('حساببنكي')) {
+              bankAccount = v;
             } else if (k.includes('هوية') || k.includes('إقامة') || k.includes('اقامة') || k.includes('انتهاء') || k.includes('صلاحية') || k.includes('expiry') || k.includes('iqama')) {
               iqamaExpiryDate = parseExcelDate(val);
             } else if (k.includes('حالة') || k.includes('status')) {
@@ -398,31 +536,41 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
 
           const combinedOtherAllowances = (allowancesVal || 0) + (incentiveVal || 0);
 
-          const newEmp: Employee = {
+          const newEmpItem: Employee = {
             id: `emp-dat-${cleanCode}`,
             employeeCode: finalCode,
             name: finalName,
             position: position || 'موظف',
             department: department || 'تكنولوجيا المعلومات',
             email: '',
-            phone: '',
+            phone: phone || '',
             avatar: '',
             baseSalary: baseSalary || 0,
             housingAllowance: housingVal || 0,
             transportAllowance: transportVal || 0,
             otherAllowances: combinedOtherAllowances || 0,
-            gosiInsurance: 0,
-            iqamaOrIdNumber: finalCode,
+            gosiInsurance: employeeInsuranceShare || 0,
+            iqamaOrIdNumber: nationalId || finalCode,
             iqamaExpiryDate: iqamaExpiryDate || '',
-            contractType: '',
+            contractType: 'مصري',
             contractExpiryDate: '',
-            joinDate: new Date().toISOString().split('T')[0],
+            joinDate: joinDate || new Date().toISOString().split('T')[0],
             status: finalStatus,
-            bankName: '',
-            bankAccount: '',
+            bankName: bankName || '',
+            bankAccount: bankAccount || '',
+            birthDate: birthDate || '',
+            nationalId: nationalId || '',
+            insuranceNumber: insuranceNumber || '',
+            insuranceStatus: insuranceStatus || 'خاضع للتأمين',
+            employeeInsuranceShare: employeeInsuranceShare || 0,
+            employerInsuranceShare: employerInsuranceShare || 0,
+            taxAmount: taxAmount || 0,
+            militaryStatus: militaryStatus || 'أدى الخدمة',
+            maritalStatus: maritalStatus || 'أعزب',
+            address: address || '',
           };
 
-          parsedList.push(newEmp);
+          parsedList.push(newEmpItem);
         });
 
         if (parsedList.length === 0) {
@@ -479,6 +627,16 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
     bankName: '',
     bankAccount: '',
     status: 'active',
+    birthDate: '',
+    nationalId: '',
+    insuranceNumber: '',
+    insuranceStatus: 'خاضع للتأمين',
+    employeeInsuranceShare: 0,
+    employerInsuranceShare: 0,
+    taxAmount: 0,
+    militaryStatus: 'أدى الخدمة',
+    maritalStatus: 'أعزب',
+    address: '',
   });
   const [initialAssetCode, setInitialAssetCode] = useState<string>('');
 
@@ -498,6 +656,9 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
       emp.name.includes(searchTerm) ||
       emp.employeeCode.includes(searchTerm) ||
       emp.position.includes(searchTerm) ||
+      (emp.nationalId && emp.nationalId.includes(searchTerm)) ||
+      (emp.phone && emp.phone.includes(searchTerm)) ||
+      (emp.insuranceNumber && emp.insuranceNumber.includes(searchTerm)) ||
       emp.iqamaOrIdNumber.includes(searchTerm);
 
     const matchesDept = selectedDept === 'all' || emp.department === selectedDept;
@@ -509,6 +670,9 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
   const handleCreateEmployee = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEmp.name || !newEmp.position) return;
+
+    const natId = newEmp.nationalId || newEmp.iqamaOrIdNumber || '';
+    const empShare = Number(newEmp.employeeInsuranceShare !== undefined ? newEmp.employeeInsuranceShare : newEmp.gosiInsurance) || 0;
 
     const created: Employee = {
       id: `emp-${Date.now()}`,
@@ -523,15 +687,25 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
       housingAllowance: Number(newEmp.housingAllowance) || 0,
       transportAllowance: Number(newEmp.transportAllowance) || 0,
       otherAllowances: Number(newEmp.otherAllowances) || 0,
-      gosiInsurance: Number(newEmp.gosiInsurance) || 0,
-      iqamaOrIdNumber: newEmp.iqamaOrIdNumber || '',
+      gosiInsurance: empShare,
+      iqamaOrIdNumber: natId,
       iqamaExpiryDate: newEmp.iqamaExpiryDate || '',
-      contractType: newEmp.contractType as any || 'مصري',
+      contractType: (newEmp.contractType as any) || 'مصري',
       contractExpiryDate: newEmp.contractExpiryDate || '',
       joinDate: newEmp.joinDate || new Date().toISOString().split('T')[0],
       status: (newEmp.status as any) || 'active',
       bankAccount: newEmp.bankAccount || '',
       bankName: newEmp.bankName || '',
+      birthDate: newEmp.birthDate || '',
+      nationalId: natId,
+      insuranceNumber: newEmp.insuranceNumber || '',
+      insuranceStatus: newEmp.insuranceStatus || 'خاضع للتأمين',
+      employeeInsuranceShare: empShare,
+      employerInsuranceShare: Number(newEmp.employerInsuranceShare) || 0,
+      taxAmount: Number(newEmp.taxAmount) || 0,
+      militaryStatus: newEmp.militaryStatus || 'أدى الخدمة',
+      maritalStatus: newEmp.maritalStatus || 'أعزب',
+      address: newEmp.address || '',
     };
 
     onAddEmployee(created, initialAssetCode);
@@ -556,7 +730,18 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
       bankName: '',
       bankAccount: '',
       status: 'active',
+      birthDate: '',
+      nationalId: '',
+      insuranceNumber: '',
+      insuranceStatus: 'خاضع للتأمين',
+      employeeInsuranceShare: 0,
+      employerInsuranceShare: 0,
+      taxAmount: 0,
+      militaryStatus: 'أدى الخدمة',
+      maritalStatus: 'أعزب',
+      address: '',
     });
+    setInitialAssetCode('');
   };
 
   // Document Expiry Helper
@@ -667,42 +852,81 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
       {/* Employees Table Mode */}
       {viewMode === 'table' ? (
         <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xs">
-          <table className="w-full text-right text-xs">
-            <thead className="bg-white dark:bg-slate-900/80 text-slate-500 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-700">
+          <table className="w-full text-right text-xs whitespace-nowrap">
+            <thead className="bg-slate-50 dark:bg-slate-900/90 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
               <tr>
-                <th className="p-3.5">الموظف</th>
-                <th className="p-3.5">الكود الوظيفي</th>
+                <th className="p-3.5">الكود</th>
+                <th className="p-3.5">اسم الموظف</th>
+                <th className="p-3.5">الرقم القومي</th>
+                <th className="p-3.5">تاريخ الميلاد</th>
+                <th className="p-3.5">تاريخ التعيين</th>
+                <th className="p-3.5">الحالة الاجتماعية</th>
+                <th className="p-3.5">الخدمة العسكرية</th>
+                <th className="p-3.5">العنوان</th>
+                <th className="p-3.5">التليفون</th>
                 <th className="p-3.5">القسم والوظيفة</th>
                 <th className="p-3.5">الراتب الأساسي</th>
-                <th className="p-3.5">الحوافز والبدلات</th>
-                <th className="p-3.5">صلاحية الهوية / العقد</th>
+                <th className="p-3.5">البدلات</th>
+                <th className="p-3.5">التأمينات</th>
+                <th className="p-3.5">الرقم التأميني</th>
+                <th className="p-3.5 text-rose-600 dark:text-rose-400">حصة العامل</th>
+                <th className="p-3.5 text-indigo-600 dark:text-indigo-400">حصة صاحب العمل</th>
+                <th className="p-3.5 text-amber-600 dark:text-amber-400">الضريبة</th>
+                <th className="p-3.5">الحساب البنكي</th>
+                <th className="p-3.5">صلاحية الهوية</th>
                 <th className="p-3.5">الحالة</th>
-                <th className="p-3.5 text-center">الإجراءات</th>
+                <th className="p-3.5 text-center sticky left-0 bg-slate-50 dark:bg-slate-900 shadow-xs">الإجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
               {filteredEmployees.map((emp) => {
                 const totalAllowances = emp.housingAllowance + emp.transportAllowance + emp.otherAllowances;
                 const iqamaBadge = getExpiryBadge(emp.iqamaExpiryDate);
+                const empShare = emp.employeeInsuranceShare !== undefined ? emp.employeeInsuranceShare : emp.gosiInsurance;
 
                 return (
                   <tr
                     key={emp.id}
-                    className="hover:bg-white/80 dark:hover:bg-slate-700/40 transition-colors"
+                    className="hover:bg-slate-50/80 dark:hover:bg-slate-700/40 transition-colors"
                   >
+                    <td className="p-3.5 font-bold font-mono text-blue-600 dark:text-blue-400">
+                      {emp.employeeCode}
+                    </td>
                     <td className="p-3.5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xs shrink-0">
                           {emp.name.charAt(0)}
                         </div>
                         <div>
                           <p className="font-bold text-slate-800 dark:text-slate-100">{emp.name}</p>
-                          <p className="text-[10px] text-slate-400">{emp.email}</p>
+                          <p className="text-[10px] text-slate-400">{emp.email || emp.phone || '—'}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="p-3.5 font-bold text-slate-700 dark:text-slate-300">
-                      {emp.employeeCode}
+                    <td className="p-3.5 font-mono text-slate-700 dark:text-slate-300 font-bold">
+                      {emp.nationalId || emp.iqamaOrIdNumber || '—'}
+                    </td>
+                    <td className="p-3.5 font-mono text-slate-600 dark:text-slate-400">
+                      {emp.birthDate || '—'}
+                    </td>
+                    <td className="p-3.5 font-mono text-slate-600 dark:text-slate-400">
+                      {emp.joinDate || '—'}
+                    </td>
+                    <td className="p-3.5">
+                      <span className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-semibold">
+                        {emp.maritalStatus || 'أعزب'}
+                      </span>
+                    </td>
+                    <td className="p-3.5">
+                      <span className="px-2 py-0.5 rounded-lg bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 text-[11px] font-semibold">
+                        {emp.militaryStatus || 'أدى الخدمة'}
+                      </span>
+                    </td>
+                    <td className="p-3.5 max-w-[160px] truncate text-slate-600 dark:text-slate-400" title={emp.address || ''}>
+                      {emp.address || '—'}
+                    </td>
+                    <td className="p-3.5 font-mono text-slate-700 dark:text-slate-300 font-semibold" dir="ltr">
+                      {emp.phone || '—'}
                     </td>
                     <td className="p-3.5">
                       <p className="font-bold text-slate-800 dark:text-slate-200">{emp.position}</p>
@@ -717,11 +941,42 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                       +{totalAllowances.toLocaleString()} {currencySymbol}
                     </td>
                     <td className="p-3.5">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        (emp.insuranceStatus || 'خاضع للتأمين') === 'خاضع للتأمين'
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                          : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                      }`}>
+                        {emp.insuranceStatus || 'خاضع للتأمين'}
+                      </span>
+                    </td>
+                    <td className="p-3.5 font-mono text-slate-700 dark:text-slate-300 font-bold">
+                      {emp.insuranceNumber || '—'}
+                    </td>
+                    <td className="p-3.5 font-bold text-rose-600 dark:text-rose-400">
+                      {(empShare || 0).toLocaleString()} {currencySymbol}
+                    </td>
+                    <td className="p-3.5 font-bold text-indigo-600 dark:text-indigo-400">
+                      {(emp.employerInsuranceShare || 0).toLocaleString()} {currencySymbol}
+                    </td>
+                    <td className="p-3.5 font-bold text-amber-600 dark:text-amber-400">
+                      {(emp.taxAmount || 0).toLocaleString()} {currencySymbol}
+                    </td>
+                    <td className="p-3.5">
+                      {emp.bankAccount ? (
+                        <div>
+                          <p className="font-mono text-xs text-slate-800 dark:text-slate-200">{emp.bankAccount}</p>
+                          <p className="text-[10px] text-slate-400">{emp.bankName || 'حساب بنكي'}</p>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-[11px]">—</span>
+                      )}
+                    </td>
+                    <td className="p-3.5">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${iqamaBadge.color}`}>
                         {iqamaBadge.label}
                       </span>
                     </td>
-                                        <td className="p-3.5">
+                    <td className="p-3.5">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                         emp.status === 'active' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' :
                         emp.status === 'on_leave' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
@@ -734,20 +989,20 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                          'ترك العمل'}
                       </span>
                     </td>
-                    <td className="p-3.5 text-center">
-                      <div className="flex items-center justify-center gap-2">
+                    <td className="p-3.5 text-center sticky left-0 bg-white/95 dark:bg-slate-800/95 shadow-xs">
+                      <div className="flex items-center justify-center gap-1.5">
                         <button
                           id={`view-profile-btn-${emp.id}`}
                           onClick={() => setActiveProfileEmployee(emp)}
-                          className="px-2.5 py-1 rounded-xl bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 font-bold hover:bg-blue-100 transition-colors flex items-center justify-center gap-1"
+                          className="px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 font-bold hover:bg-blue-100 transition-colors flex items-center justify-center gap-1 text-[11px]"
                         >
                           <Eye className="w-3.5 h-3.5" />
-                          <span>الملف الشامل</span>
+                          <span>الملف</span>
                         </button>
                         <button
                           id={`edit-employee-btn-${emp.id}`}
                           onClick={() => setEditEmpForm(emp)}
-                          className="px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 font-bold hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors flex items-center justify-center gap-1"
+                          className="px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 font-bold hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors flex items-center justify-center gap-1 text-[11px]"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
                           <span>تعديل</span>
@@ -755,7 +1010,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                         <button
                           id={`delete-employee-btn-${emp.id}`}
                           onClick={() => onDeleteEmployee(emp.id)}
-                          className="px-2.5 py-1 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 font-bold hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center gap-1"
+                          className="px-2 py-1 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 font-bold hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center gap-1 text-[11px]"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           <span>حذف</span>
@@ -886,11 +1141,89 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
 
             {/* Profile Content Tabs Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              {/* Personal & Identification Card */}
+              <div className="p-4 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                <h4 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5 text-sm">
+                  <User className="w-4 h-4 text-blue-600" />
+                  <span>البيانات الشخصية والقومية</span>
+                </h4>
+
+                <div className="space-y-2 divide-y divide-slate-100 dark:divide-slate-800">
+                  <div className="flex justify-between pt-1">
+                    <span className="text-slate-500">الرقم القومي:</span>
+                    <span className="font-bold font-mono text-slate-900 dark:text-white">{activeProfileEmployee.nationalId || activeProfileEmployee.iqamaOrIdNumber || '—'}</span>
+                  </div>
+                  <div className="flex justify-between pt-1">
+                    <span className="text-slate-500">تاريخ الميلاد:</span>
+                    <span className="font-bold font-mono text-slate-800 dark:text-slate-200">{activeProfileEmployee.birthDate || '—'}</span>
+                  </div>
+                  <div className="flex justify-between pt-1">
+                    <span className="text-slate-500">الحالة الاجتماعية:</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200">{activeProfileEmployee.maritalStatus || 'أعزب'}</span>
+                  </div>
+                  <div className="flex justify-between pt-1">
+                    <span className="text-slate-500">موقف الخدمة العسكرية:</span>
+                    <span className="font-bold text-purple-600 dark:text-purple-400">{activeProfileEmployee.militaryStatus || 'أدى الخدمة'}</span>
+                  </div>
+                  <div className="flex justify-between pt-1">
+                    <span className="text-slate-500">رقم الهاتف:</span>
+                    <span className="font-bold font-mono text-slate-800 dark:text-slate-200" dir="ltr">{activeProfileEmployee.phone || '—'}</span>
+                  </div>
+                  <div className="flex justify-between pt-1">
+                    <span className="text-slate-500">العنوان بالتفصيل:</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200 text-left">{activeProfileEmployee.address || '—'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Insurance & Taxes Card */}
+              <div className="p-4 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                <h4 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5 text-sm">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <span>التأمينات الاجتماعية والضرائب</span>
+                </h4>
+
+                <div className="space-y-2 divide-y divide-slate-100 dark:divide-slate-800">
+                  <div className="flex justify-between pt-1">
+                    <span className="text-slate-500">حالة التأمينات:</span>
+                    <span className="font-bold text-emerald-600">{activeProfileEmployee.insuranceStatus || 'خاضع للتأمين'}</span>
+                  </div>
+                  <div className="flex justify-between pt-1">
+                    <span className="text-slate-500">الرقم التأميني:</span>
+                    <span className="font-bold font-mono text-slate-800 dark:text-slate-200">{activeProfileEmployee.insuranceNumber || '—'}</span>
+                  </div>
+                  <div className="flex justify-between pt-1">
+                    <span className="text-slate-500">حصة العامل من التأمينات:</span>
+                    <span className="font-bold text-rose-600">
+                      -{(activeProfileEmployee.employeeInsuranceShare !== undefined ? activeProfileEmployee.employeeInsuranceShare : activeProfileEmployee.gosiInsurance).toLocaleString()} {currencySymbol}
+                    </span>
+                  </div>
+                  <div className="flex justify-between pt-1">
+                    <span className="text-slate-500">حصة صاحب العمل (الشركة):</span>
+                    <span className="font-bold text-indigo-600">
+                      {(activeProfileEmployee.employerInsuranceShare || 0).toLocaleString()} {currencySymbol}
+                    </span>
+                  </div>
+                  <div className="flex justify-between pt-1">
+                    <span className="text-slate-500">الضريبة المستقطعة:</span>
+                    <span className="font-bold text-amber-600">
+                      -{(activeProfileEmployee.taxAmount || 0).toLocaleString()} {currencySymbol}
+                    </span>
+                  </div>
+                  <div className="flex justify-between pt-1">
+                    <span className="text-slate-500">بيانات البنك والحساب:</span>
+                    <span className="font-bold font-mono text-slate-800 dark:text-slate-200">
+                      {activeProfileEmployee.bankName ? `${activeProfileEmployee.bankName} - ` : ''}{activeProfileEmployee.bankAccount || '—'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               {/* Financial Breakdown Card */}
               <div className="p-4 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 space-y-3">
                 <h4 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5 text-sm">
                   <CreditCard className="w-4 h-4 text-emerald-600" />
-                  <span>الهيكل المالي والراتب</span>
+                  <span>الهيكل المالي والراتب الصافي</span>
                 </h4>
 
                 <div className="space-y-2">
@@ -911,8 +1244,16 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                     <span className="font-bold text-emerald-600">+{activeProfileEmployee.otherAllowances.toLocaleString()} {currencySymbol}</span>
                   </div>
                   <div className="flex justify-between pt-2 border-t border-slate-200 dark:border-slate-700">
-                    <span className="text-slate-500">خصم التأمينات الاجتماعية:</span>
-                    <span className="font-bold text-red-500">-{activeProfileEmployee.gosiInsurance.toLocaleString()} {currencySymbol}</span>
+                    <span className="text-slate-500">خصم التأمينات الاجتماعية (حصة العامل):</span>
+                    <span className="font-bold text-rose-500">
+                      -{(activeProfileEmployee.employeeInsuranceShare !== undefined ? activeProfileEmployee.employeeInsuranceShare : activeProfileEmployee.gosiInsurance).toLocaleString()} {currencySymbol}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">خصم الضريبة:</span>
+                    <span className="font-bold text-amber-500">
+                      -{(activeProfileEmployee.taxAmount || 0).toLocaleString()} {currencySymbol}
+                    </span>
                   </div>
                   <div className="flex justify-between pt-2 border-t border-slate-300 dark:border-slate-600 text-sm font-extrabold">
                     <span>صافي الراتب المتوقع:</span>
@@ -922,7 +1263,8 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                         activeProfileEmployee.housingAllowance +
                         activeProfileEmployee.transportAllowance +
                         activeProfileEmployee.otherAllowances -
-                        activeProfileEmployee.gosiInsurance
+                        (activeProfileEmployee.employeeInsuranceShare !== undefined ? activeProfileEmployee.employeeInsuranceShare : activeProfileEmployee.gosiInsurance) -
+                        (activeProfileEmployee.taxAmount || 0)
                       ).toLocaleString()}{' '}
                       {currencySymbol}
                     </span>
@@ -939,14 +1281,14 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
 
                 <div className="space-y-3">
                   <div>
-                    <span className="text-slate-500 block text-[11px]">رقم الهوية الوطنية / جواز السفر:</span>
-                    <span className="font-bold text-slate-800 dark:text-slate-200">{activeProfileEmployee.iqamaOrIdNumber}</span>
+                    <span className="text-slate-500 block text-[11px]">تاريخ التعيين والالتحاق:</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200">{activeProfileEmployee.joinDate || '—'}</span>
                   </div>
 
                   <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
                     <div>
                       <span className="text-[10px] text-slate-400 block">انتهاء الهوية/جواز السفر</span>
-                      <span className="font-bold">{activeProfileEmployee.iqamaExpiryDate}</span>
+                      <span className="font-bold">{activeProfileEmployee.iqamaExpiryDate || 'غير محدد'}</span>
                     </div>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${getExpiryBadge(activeProfileEmployee.iqamaExpiryDate).color}`}>
                       {getExpiryBadge(activeProfileEmployee.iqamaExpiryDate).label}
@@ -956,7 +1298,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                   <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
                     <div>
                       <span className="text-[10px] text-slate-400 block">انتهاء عقد العمل</span>
-                      <span className="font-bold">{activeProfileEmployee.contractExpiryDate}</span>
+                      <span className="font-bold">{activeProfileEmployee.contractExpiryDate || 'غير محدد'}</span>
                     </div>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${getExpiryBadge(activeProfileEmployee.contractExpiryDate).color}`}>
                       {getExpiryBadge(activeProfileEmployee.contractExpiryDate).label}
@@ -1594,8 +1936,10 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                         <th className="p-2.5">القسم</th>
                         <th className="p-2.5">الوظيفة</th>
                         <th className="p-2.5">الراتب الأساسي</th>
-                        <th className="p-2.5 text-emerald-600 dark:text-emerald-400">الحافز والبدلات</th>
+                        <th className="p-2.5 text-emerald-600 dark:text-emerald-400">البدلات</th>
                         <th className="p-2.5">إجمالي الراتب</th>
+                        <th className="p-2.5">التأمينات</th>
+                        <th className="p-2.5">حصة العامل</th>
                         <th className="p-2.5">صلاحية الهوية</th>
                         <th className="p-2.5 text-center">الحالة</th>
                       </tr>
@@ -1604,8 +1948,9 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                       {parsedImportEmps.map((emp, idx) => {
                         const totalAllowances = emp.housingAllowance + emp.transportAllowance + emp.otherAllowances;
                         const totalSalary = emp.baseSalary + totalAllowances;
+                        const empShare = emp.employeeInsuranceShare !== undefined ? emp.employeeInsuranceShare : emp.gosiInsurance;
                         return (
-                          <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                          <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 whitespace-nowrap">
                             <td className="p-2.5 font-mono font-bold text-blue-600 dark:text-blue-400">
                               {emp.employeeCode}
                             </td>
@@ -1620,6 +1965,12 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({
                             </td>
                             <td className="p-2.5 font-bold text-blue-600 dark:text-blue-400">
                               {totalSalary.toLocaleString()} {currencySymbol}
+                            </td>
+                            <td className="p-2.5 text-slate-600 dark:text-slate-400 font-mono">
+                              {emp.insuranceStatus || 'خاضع للتأمين'}
+                            </td>
+                            <td className="p-2.5 text-rose-600 dark:text-rose-400 font-bold font-mono">
+                              -{empShare.toLocaleString()} {currencySymbol}
                             </td>
                             <td className="p-2.5 text-slate-600 dark:text-slate-400 font-mono">
                               {emp.iqamaExpiryDate || '—'}
