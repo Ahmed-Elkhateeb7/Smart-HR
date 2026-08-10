@@ -9,7 +9,10 @@ import {
   Department,
   CompanySettings,
   TrainingCourse,
-  TrainingNomination
+  TrainingNomination,
+  BiometricDevice,
+  BiometricPunchLog,
+  BiometricSyncSettings
 } from '../types';
 
 export const initialDepartments: Department[] = [
@@ -104,5 +107,18 @@ export const initialCompanySettings: CompanySettings = {
 export const initialTrainingCourses: TrainingCourse[] = [];
 
 export const initialTrainingNominations: TrainingNomination[] = [];
+
+export const initialBiometricDevices: BiometricDevice[] = [];
+
+export const initialBiometricLogs: BiometricPunchLog[] = [];
+
+export const initialBiometricSettings: BiometricSyncSettings = {
+  autoDailySync: true,
+  dailySyncTime: '23:59',
+  syncFrequency: 'daily',
+  autoRegisterNewEmployees: true,
+  autoCalculateShifts: true,
+  lastGlobalSync: '2026-08-09 23:59:00',
+};
 
 

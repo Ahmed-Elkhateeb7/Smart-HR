@@ -26,10 +26,37 @@ import {
   Zap,
   CheckCheck,
   Filter,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Radio,
+  Cpu,
+  RefreshCw,
+  Sliders,
+  Terminal,
+  Activity,
+  CheckSquare
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { AttendanceRecord, Shift, AttendanceStatus, Employee, CompanySettings } from '../types';
+import {
+  AttendanceRecord,
+  Shift,
+  AttendanceStatus,
+  Employee,
+  CompanySettings,
+  BiometricDevice,
+  BiometricPunchLog,
+  BiometricSyncSettings,
+  BiometricDeviceType,
+} from '../types';
+import {
+  fetchBiometricPunchesFromDevice,
+  processBiometricPunchesToAttendance,
+  testBiometricConnection,
+} from '../utils/biometricSync';
+import { BiometricDeviceModal } from './biometric/BiometricDeviceModal';
+import { BiometricSyncModal } from './biometric/BiometricSyncModal';
+import { BiometricBridgeModal } from './biometric/BiometricBridgeModal';
+import { BiometricDevicesTab } from './biometric/BiometricDevicesTab';
+import { BiometricLogsTab } from './biometric/BiometricLogsTab';
 
 export const getTodayDateString = (): string => {
   const d = new Date();
@@ -276,6 +303,15 @@ interface AttendanceViewProps {
   onAddShift: (shift: Shift) => void;
   onUpdateShift?: (shift: Shift) => void;
   onResetShifts?: () => void;
+  biometricDevices?: BiometricDevice[];
+  onAddBiometricDevice?: (device: BiometricDevice) => void;
+  onUpdateBiometricDevice?: (device: BiometricDevice) => void;
+  onDeleteBiometricDevice?: (deviceId: string) => void;
+  biometricLogs?: BiometricPunchLog[];
+  onAddBiometricLogs?: (logs: BiometricPunchLog[]) => void;
+  onClearBiometricLogs?: () => void;
+  biometricSettings?: BiometricSyncSettings;
+  onUpdateBiometricSettings?: (settings: BiometricSyncSettings) => void;
 }
 
 export const AttendanceView: React.FC<AttendanceViewProps> = ({
@@ -293,12 +329,42 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   onAddShift,
   onUpdateShift,
   onResetShifts,
+  biometricDevices = [],
+  onAddBiometricDevice,
+  onUpdateBiometricDevice,
+  onDeleteBiometricDevice,
+  biometricLogs = [],
+  onAddBiometricLogs,
+  onClearBiometricLogs,
+  biometricSettings = {
+    autoDailySync: true,
+    dailySyncTime: '23:59',
+    syncIntervalMinutes: 60,
+    lastGlobalSync: '',
+    matchBy: 'device_user_id',
+    autoCreateEmployees: true,
+    debounceMinutes: 3,
+  },
+  onUpdateBiometricSettings,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'daily' | 'shifts'>('daily');
+  const [activeSubTab, setActiveSubTab] = useState<'daily' | 'shifts' | 'devices' | 'biometric_logs'>('daily');
   const [selectedDate, setSelectedDate] = useState<string>(() => getTodayDateString());
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
   const [editingRecord, setEditingRecord] = useState<AttendanceRecord | null>(null);
   const [showShiftModal, setShowShiftModal] = useState(false);
+
+  // Biometric State
+  const [showBiometricDeviceModal, setShowBiometricDeviceModal] = useState(false);
+  const [editingBiometricDevice, setEditingBiometricDevice] = useState<BiometricDevice | null>(null);
+  const [showBiometricSyncModal, setShowBiometricSyncModal] = useState(false);
+  const [showBiometricBridgeModal, setShowBiometricBridgeModal] = useState(false);
+  const [isBiometricSyncing, setIsBiometricSyncing] = useState(false);
+  const [lastSyncResult, setLastSyncResult] = useState<{
+    logs: BiometricPunchLog[];
+    attendanceCount: number;
+    newEmployees: Employee[];
+    device: BiometricDevice | null;
+  } | null>(null);
 
   // Edit Shift State & Batch Edit Daily Attendance State
   const [editingShift, setEditingShift] = useState<Shift | null>(null);
@@ -350,6 +416,140 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   const triggerNotification = (msg: string) => {
     setNotificationMsg(msg);
     setTimeout(() => setNotificationMsg(null), 4000);
+  };
+
+  const handleSyncSingleDevice = async (device: BiometricDevice) => {
+    setIsBiometricSyncing(true);
+    setShowBiometricSyncModal(true);
+
+    try {
+      const fetchedLogs = fetchBiometricPunchesFromDevice(device, employees || [], selectedDate || undefined);
+
+      if (onAddBiometricLogs) {
+        onAddBiometricLogs(fetchedLogs);
+      }
+
+      const { updatedAttendance, newEmployeesCreated } = processBiometricPunchesToAttendance(
+        fetchedLogs,
+        employees || [],
+        shifts,
+        attendance
+      );
+
+      if (onAddEmployee && newEmployeesCreated.length > 0) {
+        newEmployeesCreated.forEach((e) => onAddEmployee(e));
+      }
+
+      if (onBatchUpdateAttendance) {
+        onBatchUpdateAttendance(updatedAttendance);
+      } else {
+        updatedAttendance.forEach((rec) => onUpdateAttendanceRecord(rec));
+      }
+
+      const updatedDevice: BiometricDevice = {
+        ...device,
+        status: 'online',
+        lastSyncTime: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        lastSyncLogsCount: fetchedLogs.length,
+        totalPunchesStored: (device.totalPunchesStored || 1200) + fetchedLogs.length,
+      };
+      if (onUpdateBiometricDevice) {
+        onUpdateBiometricDevice(updatedDevice);
+      }
+
+      if (onUpdateBiometricSettings && biometricSettings) {
+        onUpdateBiometricSettings({
+          ...biometricSettings,
+          lastGlobalSync: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        });
+      }
+
+      setLastSyncResult({
+        logs: fetchedLogs,
+        attendanceCount: updatedAttendance.length,
+        newEmployees: newEmployeesCreated,
+        device: updatedDevice,
+      });
+
+      triggerNotification(`تم بنجاح سحب ${fetchedLogs.length} حركة بصمة من ${device.name || device.deviceName || 'الجهاز'}.`);
+    } catch (err) {
+      console.error('Error during biometric sync:', err);
+      triggerNotification('حدث خطأ أثناء مزامنة البصمة.');
+    } finally {
+      setIsBiometricSyncing(false);
+    }
+  };
+
+  const handleSyncAllDevices = async () => {
+    const currentDevices = biometricDevices || [];
+    if (currentDevices.length === 0) {
+      setActiveSubTab('devices');
+      setShowBiometricDeviceModal(true);
+      triggerNotification('يرجى ربط جهاز بصمة أولاً لإجراء المزامنة.');
+      return;
+    }
+
+    setIsBiometricSyncing(true);
+    setShowBiometricSyncModal(true);
+
+    try {
+      let allFetchedLogs: BiometricPunchLog[] = [];
+      for (const dev of currentDevices) {
+        const logs = fetchBiometricPunchesFromDevice(dev, employees || [], selectedDate || undefined);
+        allFetchedLogs = allFetchedLogs.concat(logs);
+
+        if (onUpdateBiometricDevice) {
+          onUpdateBiometricDevice({
+            ...dev,
+            status: 'online',
+            lastSyncTime: new Date().toISOString().replace('T', ' ').substring(0, 19),
+            lastSyncLogsCount: logs.length,
+          });
+        }
+      }
+
+      if (onAddBiometricLogs) {
+        onAddBiometricLogs(allFetchedLogs);
+      }
+
+      const { updatedAttendance, newEmployeesCreated } = processBiometricPunchesToAttendance(
+        allFetchedLogs,
+        employees || [],
+        shifts,
+        attendance
+      );
+
+      if (onAddEmployee && newEmployeesCreated.length > 0) {
+        newEmployeesCreated.forEach((e) => onAddEmployee(e));
+      }
+
+      if (onBatchUpdateAttendance) {
+        onBatchUpdateAttendance(updatedAttendance);
+      } else {
+        updatedAttendance.forEach((rec) => onUpdateAttendanceRecord(rec));
+      }
+
+      if (onUpdateBiometricSettings && biometricSettings) {
+        onUpdateBiometricSettings({
+          ...biometricSettings,
+          lastGlobalSync: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        });
+      }
+
+      setLastSyncResult({
+        logs: allFetchedLogs,
+        attendanceCount: updatedAttendance.length,
+        newEmployees: newEmployeesCreated,
+        device: currentDevices[0] || null,
+      });
+
+      triggerNotification(`تم بنجاح سحب ${allFetchedLogs.length} حركة بصمة من جميع الأجهزة وتحديث كشف الحضور.`);
+    } catch (err) {
+      console.error('Error during all biometric sync:', err);
+      triggerNotification('حدث خطأ أثناء مزامنة البصمات.');
+    } finally {
+      setIsBiometricSyncing(false);
+    }
   };
 
   const handleImportDatFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1104,23 +1304,67 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700 shrink-0">
+        <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700 shrink-0 overflow-x-auto">
           <button
             onClick={() => setActiveSubTab('daily')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
               activeSubTab === 'daily'
                 ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             جدول الحضور اليومي
           </button>
           <button
+            onClick={() => setActiveSubTab('devices')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
+              activeSubTab === 'devices'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Radio className="w-4 h-4 text-blue-400" />
+            <span>أجهزة البصمة والربط التلقائي</span>
+            {(biometricDevices?.length || 0) > 0 && (
+              <span
+                className={`px-1.5 py-0.2 text-[10px] font-mono font-bold rounded-full ${
+                  activeSubTab === 'devices'
+                    ? 'bg-blue-800 text-white'
+                    : 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                }`}
+              >
+                {biometricDevices?.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveSubTab('biometric_logs')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
+              activeSubTab === 'biometric_logs'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <FileCode className="w-4 h-4 text-purple-400" />
+            <span>سجل حركات البصمة</span>
+            {(biometricLogs?.length || 0) > 0 && (
+              <span
+                className={`px-1.5 py-0.2 text-[10px] font-mono font-bold rounded-full ${
+                  activeSubTab === 'biometric_logs'
+                    ? 'bg-blue-800 text-white'
+                    : 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300'
+                }`}
+              >
+                {biometricLogs?.length}
+              </span>
+            )}
+          </button>
+          <button
             onClick={() => setActiveSubTab('shifts')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
               activeSubTab === 'shifts'
                 ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             إعداد الورديات والدوام
@@ -1143,6 +1387,31 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
           {/* Action Buttons Toolbar */}
           <div className="flex flex-wrap items-center justify-end gap-2 mb-2">
+            {/* Biometric Live Sync Button */}
+            <button
+              onClick={handleSyncAllDevices}
+              disabled={isBiometricSyncing}
+              className="px-3.5 py-1.5 rounded-full text-white text-xs font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 transition-all flex items-center gap-1.5 shadow-sm shadow-blue-600/30 active:scale-98 cursor-pointer disabled:opacity-50 ring-1 ring-blue-400/40"
+              title="سحب حركات البصمة فورياً من كافة أجهزة البصمة المتصلة بالشبكة"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isBiometricSyncing ? 'animate-spin' : ''}`} />
+              <span>{isBiometricSyncing ? 'جاري سحب البصمة...' : 'سحب البصمات (Live Sync)'}</span>
+              {(biometricDevices?.length || 0) > 0 && (
+                <span className="bg-blue-900/60 text-blue-100 text-[10px] px-1.5 py-0.2 rounded-full font-mono">
+                  {biometricDevices?.length} جهاز
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setActiveSubTab('devices')}
+              className="px-3 py-1.5 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 active:scale-98 cursor-pointer border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 bg-blue-50/80 dark:bg-blue-950/40 hover:bg-blue-100"
+              title="الانتقال إلى تبويب إدارة وربط أجهزة البصمة"
+            >
+              <Radio className="w-3.5 h-3.5 text-blue-600" />
+              <span>إدارة الأجهزة</span>
+            </button>
+
             <button
               onClick={handleOpenMissingCheckoutsModal}
               className="px-3.5 py-1.5 rounded-full text-white text-xs font-bold bg-amber-600 hover:bg-amber-700 transition-colors flex items-center gap-1.5 shadow-sm shadow-amber-600/30 active:scale-98 cursor-pointer ring-1 ring-amber-400/50"
@@ -1528,6 +1797,48 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
             ))}
           </div>
         </div>
+      )}
+
+      {/* Biometric Devices Subtab */}
+      {activeSubTab === 'devices' && (
+        <BiometricDevicesTab
+          devices={biometricDevices || []}
+          settings={biometricSettings}
+          onAddDevice={() => {
+            setEditingBiometricDevice(null);
+            setShowBiometricDeviceModal(true);
+          }}
+          onEditDevice={(dev) => {
+            setEditingBiometricDevice(dev);
+            setShowBiometricDeviceModal(true);
+          }}
+          onDeleteDevice={(id) => {
+            if (onDeleteBiometricDevice) onDeleteBiometricDevice(id);
+            triggerNotification('تم إزالة ربط جهاز البصمة بنجاح.');
+          }}
+          onUpdateDevice={(dev) => {
+            if (onUpdateBiometricDevice) onUpdateBiometricDevice(dev);
+          }}
+          onUpdateSettings={(newSettings) => {
+            if (onUpdateBiometricSettings) onUpdateBiometricSettings(newSettings);
+            triggerNotification('تم حفظ إعدادات المزامنة والربط التلقائي بنجاح.');
+          }}
+          onSyncDevice={handleSyncSingleDevice}
+          onSyncAllDevices={handleSyncAllDevices}
+          onOpenBridgeModal={() => setShowBiometricBridgeModal(true)}
+          isSyncing={isBiometricSyncing}
+          totalLogsCount={biometricLogs?.length || 0}
+        />
+      )}
+
+      {/* Biometric Raw Punch Logs Subtab */}
+      {activeSubTab === 'biometric_logs' && (
+        <BiometricLogsTab
+          logs={biometricLogs || []}
+          devices={biometricDevices || []}
+          onClearLogs={onClearBiometricLogs}
+          onRefreshPunches={() => triggerNotification('تم تحديث قائمة حركات وسجلات البصمة.')}
+        />
       )}
 
       {/* Edit Attendance Record Modal */}
@@ -2596,6 +2907,52 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Biometric Device Add/Edit Modal */}
+      {showBiometricDeviceModal && (
+        <BiometricDeviceModal
+          isOpen={showBiometricDeviceModal}
+          initialDevice={editingBiometricDevice}
+          onClose={() => {
+            setShowBiometricDeviceModal(false);
+            setEditingBiometricDevice(null);
+          }}
+          onSave={(dev) => {
+            if (editingBiometricDevice) {
+              if (onUpdateBiometricDevice) onUpdateBiometricDevice(dev);
+              triggerNotification(`تم تحديث بيانات جهاز البصمة (${dev.deviceName}) بنجاح.`);
+            } else {
+              if (onAddBiometricDevice) onAddBiometricDevice(dev);
+              triggerNotification(`تم ربط جهاز البصمة الجديد (${dev.deviceName}) بنجاح.`);
+            }
+            setShowBiometricDeviceModal(false);
+            setEditingBiometricDevice(null);
+          }}
+        />
+      )}
+
+      {/* Biometric Sync Progress & Results Modal */}
+      {showBiometricSyncModal && (
+        <BiometricSyncModal
+          isOpen={showBiometricSyncModal}
+          onClose={() => setShowBiometricSyncModal(false)}
+          isSyncing={isBiometricSyncing}
+          logs={lastSyncResult?.logs || []}
+          attendanceCount={lastSyncResult?.attendanceCount || 0}
+          newEmployeesCreated={lastSyncResult?.newEmployees || []}
+          device={lastSyncResult?.device || undefined}
+        />
+      )}
+
+      {/* Biometric Bridge Python Script Modal */}
+      {showBiometricBridgeModal && (
+        <BiometricBridgeModal
+          isOpen={showBiometricBridgeModal}
+          onClose={() => setShowBiometricBridgeModal(false)}
+          devices={biometricDevices || []}
+          settings={biometricSettings || { autoDailySync: true, dailySyncTime: '23:59' }}
+        />
       )}
     </div>
   );

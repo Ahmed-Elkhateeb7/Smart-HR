@@ -24,7 +24,9 @@ import {
   Upload,
   Download,
   FileSpreadsheet,
-  Check
+  Check,
+  User,
+  ShieldCheck
 } from 'lucide-react';
 import { Employee, Asset, Loan, Department } from '../types';
 

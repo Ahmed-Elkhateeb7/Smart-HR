@@ -26,7 +26,10 @@ import {
   initialShifts,
   initialCompanySettings,
   initialTrainingCourses,
-  initialTrainingNominations
+  initialTrainingNominations,
+  initialBiometricDevices,
+  initialBiometricLogs,
+  initialBiometricSettings
 } from './data/initialData';
 
 import {
@@ -43,7 +46,10 @@ import {
   CompanySettings,
   KpiSettings,
   TrainingCourse,
-  TrainingNomination
+  TrainingNomination,
+  BiometricDevice,
+  BiometricPunchLog,
+  BiometricSyncSettings
 } from './types';
 
 import {
@@ -61,7 +67,10 @@ import {
   saveDepartments,
   saveKpiSettings,
   saveTrainingCourses,
-  saveTrainingNominations
+  saveTrainingNominations,
+  saveBiometricDevices,
+  saveBiometricLogs,
+  saveBiometricSettings
 } from './utils/storage';
 
 export default function App() {
@@ -89,6 +98,9 @@ export default function App() {
   const [documents, setDocuments] = useState<DocumentItem[]>(initialLoaded.documents);
   const [trainingCourses, setTrainingCourses] = useState<TrainingCourse[]>(initialLoaded.trainingCourses || initialTrainingCourses);
   const [trainingNominations, setTrainingNominations] = useState<TrainingNomination[]>(initialLoaded.trainingNominations || initialTrainingNominations);
+  const [biometricDevices, setBiometricDevices] = useState<BiometricDevice[]>(initialLoaded.biometricDevices || initialBiometricDevices);
+  const [biometricLogs, setBiometricLogs] = useState<BiometricPunchLog[]>(initialLoaded.biometricLogs || initialBiometricLogs);
+  const [biometricSettings, setBiometricSettings] = useState<BiometricSyncSettings>(initialLoaded.biometricSettings || initialBiometricSettings);
 
   // Auto-persist state changes
   useEffect(() => { saveEmployees(employees); }, [employees]);
@@ -101,6 +113,9 @@ export default function App() {
   useEffect(() => { saveDocuments(documents); }, [documents]);
   useEffect(() => { saveTrainingCourses(trainingCourses); }, [trainingCourses]);
   useEffect(() => { saveTrainingNominations(trainingNominations); }, [trainingNominations]);
+  useEffect(() => { saveBiometricDevices(biometricDevices); }, [biometricDevices]);
+  useEffect(() => { saveBiometricLogs(biometricLogs); }, [biometricLogs]);
+  useEffect(() => { saveBiometricSettings(biometricSettings); }, [biometricSettings]);
   useEffect(() => { saveCurrencySymbol(currencySymbol); }, [currencySymbol]);
   useEffect(() => { saveCompanySettings(companySettings); }, [companySettings]);
   useEffect(() => { saveDepartments(departments); }, [departments]);
@@ -607,6 +622,35 @@ export default function App() {
     }
   };
 
+  // Biometric Device & Logs Handlers
+  const handleAddBiometricDevice = (device: BiometricDevice) => {
+    setBiometricDevices((prev) => [device, ...prev]);
+  };
+
+  const handleUpdateBiometricDevice = (updatedDevice: BiometricDevice) => {
+    setBiometricDevices((prev) =>
+      prev.map((d) => (d.id === updatedDevice.id ? updatedDevice : d))
+    );
+  };
+
+  const handleDeleteBiometricDevice = (deviceId: string) => {
+    if (window.confirm('هل أنت متأكد من رغبتك في إزالة ربط جهاز البصمة هذا؟')) {
+      setBiometricDevices((prev) => prev.filter((d) => d.id !== deviceId));
+    }
+  };
+
+  const handleAddBiometricLogs = (newLogs: BiometricPunchLog[]) => {
+    setBiometricLogs((prev) => [...newLogs, ...prev]);
+  };
+
+  const handleClearBiometricLogs = () => {
+    setBiometricLogs([]);
+  };
+
+  const handleUpdateBiometricSettings = (newSettings: BiometricSyncSettings) => {
+    setBiometricSettings(newSettings);
+  };
+
   const handleLogin = (password: string) => {
     if (password === '1001') {
       localStorage.setItem('isAuthenticated', 'true');
@@ -759,6 +803,15 @@ export default function App() {
               onAddShift={handleAddShift}
               onUpdateShift={handleUpdateShift}
               onResetShifts={handleResetShifts}
+              biometricDevices={biometricDevices}
+              onAddBiometricDevice={handleAddBiometricDevice}
+              onUpdateBiometricDevice={handleUpdateBiometricDevice}
+              onDeleteBiometricDevice={handleDeleteBiometricDevice}
+              biometricLogs={biometricLogs}
+              onAddBiometricLogs={handleAddBiometricLogs}
+              onClearBiometricLogs={handleClearBiometricLogs}
+              biometricSettings={biometricSettings}
+              onUpdateBiometricSettings={handleUpdateBiometricSettings}
             />
           )}
 

@@ -252,3 +252,64 @@ export interface TrainingNomination {
   certificateIssued?: boolean;
 }
 
+export type BiometricDeviceType =
+  | 'fingerprint'
+  | 'face'
+  | 'rfid'
+  | 'palm'
+  | 'hybrid';
+
+export type BiometricConnectionStatus = 'online' | 'offline' | 'syncing' | 'error' | 'untested';
+
+export interface BiometricDevice {
+  id: string;
+  name: string; // e.g. "جهاز بصمة البوابة الرئيسية"
+  deviceName?: string; // alias for name
+  model: string; // e.g. "ZKTeco K40", "Hikvision DS-K1T804", "Dahua ASI7213X", "Suprema BioStation"
+  deviceType: BiometricDeviceType | string; // نوع الجهاز: بصمة إصبع / بصمة وجه / كارت / بصمة كف / مدمج
+  ip: string; // عنوان الـ IP الخاص بالجهاز
+  port: number; // رقم البورت (مثلاً 4370 أو 80 أو 5005)
+  username: string; // اسم المستخدم
+  password?: string; // كلمة المرور أو مفتاح الاتصال ComKey
+  location?: string; // موقع الجهاز أو الفرع
+  status: BiometricConnectionStatus;
+  autoSyncEnabled: boolean; // تفعيل المزامنة اليومية التلقائية
+  autoSyncTime: string; // وقت المزامنة التلقائية (مثلاً "23:59")
+  syncFrequency?: 'daily' | 'hourly' | 'every_30_min' | 'every_6_hours'; // تكرار المزامنة
+  lastSyncTime?: string; // آخر موعد مزامنة ناجحة
+  lastSyncLogsCount?: number; // عدد السجلات المسحوبة في آخر مزامنة
+  totalPunchesStored?: number; // إجمالي السجلات المخزنة
+  enrolledUsersCount?: number; // عدد الموظفين المسجلين بالجهاز
+  firmwareVersion?: string; // إصدار النظام بالجهاز
+  serialNumber?: string; // الرقم التسلسلي للجهاز
+  notes?: string;
+}
+
+export interface BiometricPunchLog {
+  id: string;
+  deviceId: string;
+  deviceName: string;
+  employeeCode: string;
+  employeeName: string;
+  timestamp: string; // YYYY-MM-DD HH:MM:SS
+  date: string; // YYYY-MM-DD
+  time: string; // HH:MM:SS
+  punchType: 'check_in' | 'check_out' | 'break_out' | 'break_in' | 'auto';
+  verifyType: 'fingerprint' | 'face' | 'card' | 'password';
+  status: 'processed' | 'duplicate' | 'pending';
+  rawLine?: string;
+}
+
+export interface BiometricSyncSettings {
+  autoDailySync: boolean;
+  dailySyncTime: string; // e.g. "23:59"
+  syncFrequency?: 'daily' | 'hourly' | 'every_30_min' | 'every_6_hours';
+  syncIntervalMinutes?: number;
+  autoRegisterNewEmployees?: boolean;
+  autoCreateEmployees?: boolean;
+  autoCalculateShifts?: boolean;
+  matchBy?: string;
+  debounceMinutes?: number;
+  lastGlobalSync?: string;
+}
+

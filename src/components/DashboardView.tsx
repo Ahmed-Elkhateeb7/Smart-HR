@@ -101,7 +101,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               أهلاً بك 👋
             </h1>
             <p className="text-xs md:text-sm text-slate-500 dark:text-slate-300 max-w-2xl leading-relaxed">
-              إليك نظرة شاملة ولحظية على أداء المؤسسة، حضور وانصراف الموظفين، وتنبيهات حارس المرتبات لشهر يوليو 2026.
+              إليك نظرة شاملة ولحظية على أداء المؤسسة، حضور وانصراف الموظفين.
             </p>
           </div>
 

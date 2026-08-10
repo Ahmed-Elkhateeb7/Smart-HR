@@ -11,7 +11,10 @@ import {
   Department,
   KpiSettings,
   TrainingCourse,
-  TrainingNomination
+  TrainingNomination,
+  BiometricDevice,
+  BiometricPunchLog,
+  BiometricSyncSettings
 } from '../types';
 
 import {
@@ -25,7 +28,10 @@ import {
   initialDepartments,
   initialCompanySettings,
   initialTrainingCourses,
-  initialTrainingNominations
+  initialTrainingNominations,
+  initialBiometricDevices,
+  initialBiometricLogs,
+  initialBiometricSettings
 } from '../data/initialData';
 
 export const STORAGE_KEYS = {
@@ -43,6 +49,9 @@ export const STORAGE_KEYS = {
   KPI_SETTINGS: 'hr_app_kpi_settings_v1',
   TRAINING_COURSES: 'hr_app_training_courses_v1',
   TRAINING_NOMINATIONS: 'hr_app_training_nominations_v1',
+  BIOMETRIC_DEVICES: 'hr_app_biometric_devices_v2',
+  BIOMETRIC_LOGS: 'hr_app_biometric_logs_v2',
+  BIOMETRIC_SETTINGS: 'hr_app_biometric_settings_v1',
 };
 
 // Safe JSON parser
@@ -159,6 +168,9 @@ export function loadAllState() {
     kpiSettings: safeParse<KpiSettings | null>(STORAGE_KEYS.KPI_SETTINGS, null),
     trainingCourses: cleanedCourses,
     trainingNominations: cleanedNominations,
+    biometricDevices: safeParse<BiometricDevice[]>(STORAGE_KEYS.BIOMETRIC_DEVICES, initialBiometricDevices),
+    biometricLogs: safeParse<BiometricPunchLog[]>(STORAGE_KEYS.BIOMETRIC_LOGS, initialBiometricLogs),
+    biometricSettings: safeParse<BiometricSyncSettings>(STORAGE_KEYS.BIOMETRIC_SETTINGS, initialBiometricSettings),
   };
 }
 
@@ -217,6 +229,18 @@ export function saveTrainingCourses(courses: TrainingCourse[]) {
 
 export function saveTrainingNominations(nominations: TrainingNomination[]) {
   safeSave(STORAGE_KEYS.TRAINING_NOMINATIONS, nominations);
+}
+
+export function saveBiometricDevices(devices: BiometricDevice[]) {
+  safeSave(STORAGE_KEYS.BIOMETRIC_DEVICES, devices);
+}
+
+export function saveBiometricLogs(logs: BiometricPunchLog[]) {
+  safeSave(STORAGE_KEYS.BIOMETRIC_LOGS, logs);
+}
+
+export function saveBiometricSettings(settings: BiometricSyncSettings) {
+  safeSave(STORAGE_KEYS.BIOMETRIC_SETTINGS, settings);
 }
 
 // Calculate storage size in MB
