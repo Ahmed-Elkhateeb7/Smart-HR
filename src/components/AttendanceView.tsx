@@ -1372,7 +1372,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         </div>
       </div>
 
-      {activeSubTab === 'daily' ? (
+      {activeSubTab === 'daily' && (
         <div className="space-y-4">
 
           {/* Hidden File Input for ZKTeco DAT Files Import */}
@@ -1403,13 +1403,27 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               )}
             </button>
 
+            {/* Separate Dedicated Button: Add / Connect New Biometric Device */}
+            <button
+              onClick={() => {
+                setEditingBiometricDevice(null);
+                setShowBiometricDeviceModal(true);
+              }}
+              className="px-3.5 py-1.5 rounded-full text-white text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 transition-all flex items-center gap-1.5 shadow-sm shadow-emerald-600/30 active:scale-98 cursor-pointer ring-1 ring-emerald-400/40"
+              title="ربط وإضافة جهاز بصمة جديد وتحديد الـ IP والبورت"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>ربط جهاز بصمة جديد</span>
+            </button>
+
+            {/* Manage & Modify Devices Button */}
             <button
               onClick={() => setActiveSubTab('devices')}
               className="px-3 py-1.5 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 active:scale-98 cursor-pointer border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 bg-blue-50/80 dark:bg-blue-950/40 hover:bg-blue-100"
-              title="الانتقال إلى تبويب إدارة وربط أجهزة البصمة"
+              title="تعديل وتغيير أجهزة البصمة وضبط إعدادات الشبكة"
             >
               <Radio className="w-3.5 h-3.5 text-blue-600" />
-              <span>إدارة الأجهزة</span>
+              <span>تعديل وإدارة الأجهزة ({biometricDevices?.length || 0})</span>
             </button>
 
             <button
@@ -1706,8 +1720,10 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
             </table>
           </div>
         </div>
-      ) : (
-        /* Shifts Management Tab */
+      )}
+
+      {/* Shifts Management Tab */}
+      {activeSubTab === 'shifts' && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
@@ -2913,7 +2929,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
       {showBiometricDeviceModal && (
         <BiometricDeviceModal
           isOpen={showBiometricDeviceModal}
-          initialDevice={editingBiometricDevice}
+          device={editingBiometricDevice}
           onClose={() => {
             setShowBiometricDeviceModal(false);
             setEditingBiometricDevice(null);
@@ -2921,10 +2937,10 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           onSave={(dev) => {
             if (editingBiometricDevice) {
               if (onUpdateBiometricDevice) onUpdateBiometricDevice(dev);
-              triggerNotification(`تم تحديث بيانات جهاز البصمة (${dev.deviceName}) بنجاح.`);
+              triggerNotification(`تم تحديث بيانات جهاز البصمة (${dev.name}) بنجاح.`);
             } else {
               if (onAddBiometricDevice) onAddBiometricDevice(dev);
-              triggerNotification(`تم ربط جهاز البصمة الجديد (${dev.deviceName}) بنجاح.`);
+              triggerNotification(`تم ربط جهاز البصمة الجديد (${dev.name}) بنجاح.`);
             }
             setShowBiometricDeviceModal(false);
             setEditingBiometricDevice(null);

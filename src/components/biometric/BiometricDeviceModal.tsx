@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Radio,
@@ -74,6 +74,30 @@ export const BiometricDeviceModal: React.FC<BiometricDeviceModalProps> = ({
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<DeviceDiagnosticResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (device) {
+      setFormData({ ...device });
+    } else {
+      setFormData({
+        name: '',
+        model: 'ZKTeco K40 Pro',
+        deviceType: 'fingerprint',
+        ip: '',
+        port: 4370,
+        username: 'admin',
+        password: '',
+        location: '',
+        status: 'offline',
+        autoSyncEnabled: true,
+        autoSyncTime: '23:59',
+        syncFrequency: 'daily',
+        notes: '',
+      });
+    }
+    setTestResult(null);
+    setErrorMessage(null);
+  }, [device, isOpen]);
 
   if (!isOpen) return null;
 
