@@ -168,7 +168,14 @@ export function loadAllState() {
     kpiSettings: safeParse<KpiSettings | null>(STORAGE_KEYS.KPI_SETTINGS, null),
     trainingCourses: cleanedCourses,
     trainingNominations: cleanedNominations,
-    biometricDevices: safeParse<BiometricDevice[]>(STORAGE_KEYS.BIOMETRIC_DEVICES, initialBiometricDevices),
+    biometricDevices: (() => {
+      const devs = safeParse<BiometricDevice[]>(STORAGE_KEYS.BIOMETRIC_DEVICES, initialBiometricDevices);
+      if (!Array.isArray(devs) || devs.length === 0) {
+        safeSave(STORAGE_KEYS.BIOMETRIC_DEVICES, initialBiometricDevices);
+        return initialBiometricDevices;
+      }
+      return devs;
+    })(),
     biometricLogs: safeParse<BiometricPunchLog[]>(STORAGE_KEYS.BIOMETRIC_LOGS, initialBiometricLogs),
     biometricSettings: safeParse<BiometricSyncSettings>(STORAGE_KEYS.BIOMETRIC_SETTINGS, initialBiometricSettings),
   };

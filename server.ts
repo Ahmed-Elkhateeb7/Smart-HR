@@ -1,5 +1,7 @@
 import express from 'express';
 import path from 'path';
+import net from 'net';
+import ZKLib from 'node-zklib';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 
@@ -216,6 +218,153 @@ app.post('/api/ai/audit-payroll', async (req, res) => {
     return res.json({ success: true, ...parsed });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Biometric Endpoint 1: Real TCP/IP Network Connection Diagnostic
+app.post('/api/biometric/test-device', async (req, res) => {
+  const { ip = '', port = 4370, timeout = 3500 } = req.body || {};
+  const cleanIp = String(ip).trim();
+  const cleanPort = Number(port) || 4370;
+
+  if (!cleanIp) {
+    return res.json({
+      success: false,
+      message: 'يرجى إدخال عنوان IP الخاص بجهاز البصمة.',
+      latencyMs: 0,
+    });
+  }
+
+  // Check if IP is private local LAN (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+  const isPrivate = /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(cleanIp);
+
+  if (isPrivate) {
+    return res.json({
+      success: false,
+      isPrivateIp: true,
+      latencyMs: 0,
+      message: `تنبيه هام: العنوان (${cleanIp}) هو عنوان داخلي (Local LAN IP) على شبكة الراوتر لديك ولا يمكن للسيرفر السحابي الوصول إليه مباشرة. بما أنك قمت بفتح Port Forwarding في الراوتر للمنفذ ${cleanPort}، يرجى كتابة الـ Public IP الخارجي للراوتر (مثل 156.xxx.xxx.xxx) أو عنوان الـ DDNS في خانة عنوان IP الجهاز.`,
+    });
+  }
+
+  // Real connection test via socket & ZKLib
+  const startTime = Date.now();
+  try {
+    const ZKClient = (ZKLib as any).default || ZKLib;
+    const zk = new ZKClient(cleanIp, cleanPort, Math.min(Number(timeout) || 3500, 6000), 5200);
+    await zk.createSocket();
+    const latency = Date.now() - startTime;
+    await zk.disconnect().catch(() => {});
+
+    return res.json({
+      success: true,
+      latencyMs: latency,
+      message: `تم الاتصال الحقيقي بجهاز البصمة بنجاح عبر الإنترنت (${cleanIp}:${cleanPort})! زمن الاستجابة: ${latency}ms.`,
+    });
+  } catch (err: any) {
+    // If ZKLib socket had an error, try basic TCP socket probe as fallback
+    const socket = new net.Socket();
+    let isHandled = false;
+
+    const timer = setTimeout(() => {
+      if (!isHandled) {
+        isHandled = true;
+        socket.destroy();
+        return res.json({
+          success: false,
+          latencyMs: 0,
+          message: `انتهت مهلة الاتصال بالـ Public IP (${cleanIp}:${cleanPort}). تأكد من أن منفذ ${cleanPort} مفتوح في الراوتر وموجه إلى 192.168.2.254 وأن جدار حماية الراوتر يسمح بحزم TCP/UDP.`,
+        });
+      }
+    }, Math.min(Number(timeout) || 3500, 6000));
+
+    socket.connect(cleanPort, cleanIp, () => {
+      if (!isHandled) {
+        isHandled = true;
+        clearTimeout(timer);
+        const latency = Date.now() - startTime;
+        socket.destroy();
+        return res.json({
+          success: true,
+          latencyMs: latency,
+          message: `تم الوصول للمنفذ ${cleanPort} على الـ IP (${cleanIp}) بنجاح! زمن الاستجابة: ${latency}ms.`,
+        });
+      }
+    });
+
+    socket.on('error', (sockErr: any) => {
+      if (!isHandled) {
+        isHandled = true;
+        clearTimeout(timer);
+        socket.destroy();
+        return res.json({
+          success: false,
+          latencyMs: 0,
+          errorCode: sockErr.code || 'ERR_CONNECTION',
+          message: `فشل الاتصال بالـ IP (${cleanIp}:${cleanPort}): تأكد من كتابة الـ Public IP الحقيقي أو اسم DDNS وتوجيه بورت ${cleanPort} في الراوتر.`,
+        });
+      }
+    });
+  }
+});
+
+// Biometric Endpoint 2: Real live sync logs fetching from public IP / device
+app.post('/api/biometric/sync-device', async (req, res) => {
+  const { device } = req.body || {};
+  const ip = String(device?.ip || '').trim();
+  const port = Number(device?.port) || 4370;
+
+  if (!ip) {
+    return res.json({
+      success: false,
+      logs: [],
+      message: 'بيانات الجهاز غير مكتملة (يرجى تحديد عنوان IP).',
+    });
+  }
+
+  const isPrivate = /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(ip);
+  if (isPrivate) {
+    return res.json({
+      success: false,
+      isPrivateIp: true,
+      logs: [],
+      message: `لا يمكن الاتصال المباشر بعنوان محلي (${ip}) من السحابة. بما أنك قمت بعمل Port Forwarding، يرجى كتابة الـ Public IP الخاص بالراوتر في إعدادات الجهاز بدلاً من ${ip}.`,
+    });
+  }
+
+  try {
+    const ZKClient = (ZKLib as any).default || ZKLib;
+    const zk = new ZKClient(ip, port, 10000, 5200);
+    await zk.createSocket();
+    const users = await zk.getUsers().catch(() => ({ data: [] }));
+    const attendances = await zk.getAttendances().catch(() => ({ data: [] }));
+    await zk.disconnect().catch(() => {});
+
+    const rawLogs = Array.isArray(attendances?.data) ? attendances.data : [];
+    const formattedLogs = rawLogs.map((item: any, idx: number) => ({
+      id: `live-zk-${Date.now()}-${idx}`,
+      deviceIp: ip,
+      devicePort: port,
+      employeeCode: String(item.deviceUserId || item.uid || item.user_id || idx + 1),
+      timestamp: item.recordTime ? new Date(item.recordTime).toISOString().replace('T', ' ').substring(0, 19) : new Date().toISOString().replace('T', ' ').substring(0, 19),
+      punchType: item.punch === 0 ? 'check_in' : 'check_out',
+      verifyType: 'fingerprint',
+      rawText: `${item.deviceUserId || item.uid}\t${item.recordTime}\t1\t0\t1\t0`,
+    }));
+
+    return res.json({
+      success: true,
+      logs: formattedLogs,
+      usersCount: users?.data?.length || 0,
+      totalLogs: formattedLogs.length,
+      message: `تم سحب ${formattedLogs.length} حركة حضور وانصراف حقيقية من جهاز البصمة بنجاح!`,
+    });
+  } catch (err: any) {
+    return res.json({
+      success: false,
+      logs: [],
+      message: `تعذر سحب البيانات من الجهاز (${ip}:${port}): ${err.message || 'انتهت المهلة'}. يرجى التحقق من توجيه المنفذ في الراوتر.`,
+    });
   }
 });
 

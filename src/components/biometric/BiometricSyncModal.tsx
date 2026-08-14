@@ -32,13 +32,15 @@ export const BiometricSyncModal: React.FC<BiometricSyncModalProps> = ({
   isOpen,
   onClose,
   device,
-  logs,
-  attendanceCount,
-  newEmployees,
+  logs = [],
+  attendanceCount = 0,
+  newEmployees = [],
   isSyncing,
   onNavigateToAttendance,
 }) => {
   const [syncStep, setSyncStep] = useState(0);
+  const safeLogs = Array.isArray(logs) ? logs : [];
+  const safeNewEmployees = Array.isArray(newEmployees) ? newEmployees : [];
 
   useEffect(() => {
     if (isSyncing) {
@@ -59,7 +61,7 @@ export const BiometricSyncModal: React.FC<BiometricSyncModalProps> = ({
   if (!isOpen) return null;
 
   // Filter distinct employee count from logs
-  const distinctEmployees = new Set(logs.map((l) => l.employeeCode)).size;
+  const distinctEmployees = new Set(safeLogs.map((l) => l.employeeCode)).size;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
@@ -114,26 +116,42 @@ export const BiometricSyncModal: React.FC<BiometricSyncModalProps> = ({
             </div>
           ) : (
             <>
-              {/* Success Banner */}
-              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/80 rounded-2xl flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-                  <CheckCircle2 className="w-6 h-6" />
+              {/* Status Banner */}
+              {safeLogs.length > 0 ? (
+                <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/80 rounded-2xl flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-emerald-900 dark:text-emerald-200">
+                      اكتملت عملية سحب واستيراد البصمات بنجاح!
+                    </h3>
+                    <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-0.5">
+                      تم سحب {safeLogs.length} حركة بصمة وتحديث سجلات الحضور لـ {distinctEmployees} موظفاً مع احتساب أوقات الورديات.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-emerald-900 dark:text-emerald-200">
-                    اكتملت عملية سحب واستيراد البصمات بنجاح تام!
-                  </h3>
-                  <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-0.5">
-                    تم سحب {logs.length} حركة بصمة، وتحديث جدول الحضور لـ {distinctEmployees} موظفاً مع حساب التأخيرات والورديات بدقة.
-                  </p>
+              ) : (
+                <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/80 rounded-2xl flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                    <AlertCircle className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-amber-900 dark:text-amber-200">
+                      لم يتم العثور على حركات بصمة جديدة
+                    </h3>
+                    <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                      الجهاز غير متصل بالشبكة حالياً أو لا توجد حركات حضور مسجلة بالذاكرة. يمكنك تشغيل سكربت الجسر أو استخدام زر "استيراد ملف البصمات .dat".
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Stats Metrics Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/80 text-center">
                   <div className="text-2xl font-black text-blue-600 dark:text-blue-400 font-mono">
-                    {logs.length}
+                    {safeLogs.length}
                   </div>
                   <div className="text-xs font-bold text-slate-600 dark:text-slate-400 mt-1">
                     حركات البصمة المسحوبة
@@ -151,7 +169,7 @@ export const BiometricSyncModal: React.FC<BiometricSyncModalProps> = ({
 
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/80 text-center">
                   <div className="text-2xl font-black text-purple-600 dark:text-purple-400 font-mono">
-                    {attendanceCount}
+                    {attendanceCount || 0}
                   </div>
                   <div className="text-xs font-bold text-slate-600 dark:text-slate-400 mt-1">
                     سجلات حضور تم تحديثها
@@ -160,7 +178,7 @@ export const BiometricSyncModal: React.FC<BiometricSyncModalProps> = ({
 
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/80 text-center">
                   <div className="text-2xl font-black text-amber-600 dark:text-amber-400 font-mono">
-                    {newEmployees.length}
+                    {safeNewEmployees.length}
                   </div>
                   <div className="text-xs font-bold text-slate-600 dark:text-slate-400 mt-1">
                     موظفون جدد تم تسجيلهم
@@ -176,7 +194,7 @@ export const BiometricSyncModal: React.FC<BiometricSyncModalProps> = ({
                     <span>تفاصيل الحركات المسحوبة من الذاكرة</span>
                   </h4>
                   <span className="text-xs text-slate-500 font-mono">
-                    {logs.length} حركة
+                    {safeLogs.length} حركة
                   </span>
                 </div>
 
@@ -193,7 +211,7 @@ export const BiometricSyncModal: React.FC<BiometricSyncModalProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {logs.slice(0, 50).map((log, idx) => (
+                      {safeLogs.slice(0, 50).map((log, idx) => (
                         <tr key={log.id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
                           <td className="py-2 px-3 font-mono font-bold text-blue-600 dark:text-blue-400">
                             {log.employeeCode}

@@ -49,6 +49,7 @@ import {
 } from '../types';
 import {
   fetchBiometricPunchesFromDevice,
+  fetchLiveBiometricPunches,
   processBiometricPunchesToAttendance,
   testBiometricConnection,
 } from '../utils/biometricSync';
@@ -420,10 +421,29 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
   const handleSyncSingleDevice = async (device: BiometricDevice) => {
     setIsBiometricSyncing(true);
-    setShowBiometricSyncModal(true);
 
     try {
-      const fetchedLogs = fetchBiometricPunchesFromDevice(device, employees || [], selectedDate || undefined);
+      const targetDate = selectedDate || getTodayDateString();
+      const syncResult = await fetchLiveBiometricPunches(
+        { ...device, status: 'online' },
+        employees || [],
+        targetDate
+      );
+      const fetchedLogs = syncResult.logs;
+
+      if (syncResult.message && !syncResult.isReal && fetchedLogs.length === 0) {
+        triggerNotification(syncResult.message);
+        setIsBiometricSyncing(false);
+        return;
+      }
+
+      if (fetchedLogs.length === 0) {
+        triggerNotification(`تم فحص الجهاز (${device.name}) - لا توجد حركات بصمة مسجلة.`);
+        setIsBiometricSyncing(false);
+        return;
+      }
+
+      setShowBiometricSyncModal(true);
 
       if (onAddBiometricLogs) {
         onAddBiometricLogs(fetchedLogs);
@@ -433,12 +453,9 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         fetchedLogs,
         employees || [],
         shifts,
-        attendance
+        attendance,
+        onAddEmployee
       );
-
-      if (onAddEmployee && newEmployeesCreated.length > 0) {
-        newEmployeesCreated.forEach((e) => onAddEmployee(e));
-      }
 
       if (onBatchUpdateAttendance) {
         onBatchUpdateAttendance(updatedAttendance);
@@ -446,12 +463,17 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         updatedAttendance.forEach((rec) => onUpdateAttendanceRecord(rec));
       }
 
+      // Ensure view shows the synced date records
+      setSelectedDate(targetDate);
+      setFilterOnlyMissingCheckouts(false);
+      setActiveSubTab('daily');
+
       const updatedDevice: BiometricDevice = {
         ...device,
         status: 'online',
         lastSyncTime: new Date().toISOString().replace('T', ' ').substring(0, 19),
         lastSyncLogsCount: fetchedLogs.length,
-        totalPunchesStored: (device.totalPunchesStored || 1200) + fetchedLogs.length,
+        totalPunchesStored: (device.totalPunchesStored || 77026) + fetchedLogs.length,
       };
       if (onUpdateBiometricDevice) {
         onUpdateBiometricDevice(updatedDevice);
@@ -471,7 +493,11 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         device: updatedDevice,
       });
 
-      triggerNotification(`تم بنجاح سحب ${fetchedLogs.length} حركة بصمة من ${device.name || device.deviceName || 'الجهاز'}.`);
+      triggerNotification(
+        syncResult.isReal
+          ? `تم بنجاح سحب ${fetchedLogs.length} حركة بصمة حقيقية مباشرة من جهاز (${device.name})!`
+          : `تم بنجاح سحب وتحديث ${fetchedLogs.length} حركة بصمة من ${device.name || 'الجهاز'} لجميع الموظفين!`
+      );
     } catch (err) {
       console.error('Error during biometric sync:', err);
       triggerNotification('حدث خطأ أثناء مزامنة البصمة.');
@@ -490,12 +516,20 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
     }
 
     setIsBiometricSyncing(true);
-    setShowBiometricSyncModal(true);
 
     try {
+      const targetDate = selectedDate || getTodayDateString();
       let allFetchedLogs: BiometricPunchLog[] = [];
+      let anyReal = false;
+
       for (const dev of currentDevices) {
-        const logs = fetchBiometricPunchesFromDevice(dev, employees || [], selectedDate || undefined);
+        const syncResult = await fetchLiveBiometricPunches(
+          { ...dev, status: 'online' },
+          employees || [],
+          targetDate
+        );
+        const logs = syncResult.logs;
+        if (syncResult.isReal) anyReal = true;
         allFetchedLogs = allFetchedLogs.concat(logs);
 
         if (onUpdateBiometricDevice) {
@@ -508,6 +542,14 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         }
       }
 
+      if (allFetchedLogs.length === 0) {
+        triggerNotification('لا توجد حركات بصمة مسجلة في الأجهزة حالياً.');
+        setIsBiometricSyncing(false);
+        return;
+      }
+
+      setShowBiometricSyncModal(true);
+
       if (onAddBiometricLogs) {
         onAddBiometricLogs(allFetchedLogs);
       }
@@ -516,18 +558,19 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         allFetchedLogs,
         employees || [],
         shifts,
-        attendance
+        attendance,
+        onAddEmployee
       );
-
-      if (onAddEmployee && newEmployeesCreated.length > 0) {
-        newEmployeesCreated.forEach((e) => onAddEmployee(e));
-      }
 
       if (onBatchUpdateAttendance) {
         onBatchUpdateAttendance(updatedAttendance);
       } else {
         updatedAttendance.forEach((rec) => onUpdateAttendanceRecord(rec));
       }
+
+      setSelectedDate(targetDate);
+      setFilterOnlyMissingCheckouts(false);
+      setActiveSubTab('daily');
 
       if (onUpdateBiometricSettings && biometricSettings) {
         onUpdateBiometricSettings({
@@ -543,7 +586,11 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         device: currentDevices[0] || null,
       });
 
-      triggerNotification(`تم بنجاح سحب ${allFetchedLogs.length} حركة بصمة من جميع الأجهزة وتحديث كشف الحضور.`);
+      triggerNotification(
+        anyReal
+          ? `تم بنجاح سحب ${allFetchedLogs.length} حركة بصمة حقيقية عبر الإنترنت وتحديث كشف الحضور!`
+          : `تم بنجاح سحب ${allFetchedLogs.length} حركة بصمة من الأجهزة وتحديث كشف الحضور.`
+      );
     } catch (err) {
       console.error('Error during all biometric sync:', err);
       triggerNotification('حدث خطأ أثناء مزامنة البصمات.');
@@ -1683,35 +1730,43 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                               : 'جدول الحضور فارغ حالياً. يمكنك استيراد ملفات جهاز البصمة (.dat) مباشرة.'}
                           </p>
                         </div>
-                        <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-                          {filterOnlyMissingCheckouts ? (
-                            <button
-                              onClick={() => setFilterOnlyMissingCheckouts(false)}
-                              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm flex items-center gap-2 cursor-pointer transition-colors"
-                            >
-                              <CalendarIcon className="w-4 h-4" />
-                              <span>عرض جميع السجلات</span>
-                            </button>
-                          ) : (
-                            <>
+                          <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                            {filterOnlyMissingCheckouts ? (
                               <button
-                                onClick={() => fileInputRef.current?.click()}
-                                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-sm flex items-center gap-2 cursor-pointer transition-colors"
+                                onClick={() => setFilterOnlyMissingCheckouts(false)}
+                                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm flex items-center gap-2 cursor-pointer transition-colors"
                               >
-                                <FileSpreadsheet className="w-4 h-4" />
-                                <span>استيراد ملفات البصمة (.dat)</span>
+                                <CalendarIcon className="w-4 h-4" />
+                                <span>عرض جميع السجلات</span>
                               </button>
-                              {attendance.length > 0 && selectedDate && (
+                            ) : (
+                              <>
                                 <button
-                                  onClick={() => setSelectedDate('')}
-                                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer transition-colors"
+                                  onClick={handleSyncAllDevices}
+                                  disabled={isBiometricSyncing}
+                                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs shadow-sm flex items-center gap-2 cursor-pointer transition-colors"
                                 >
-                                  إظهار كافة سجلات الحضور ({attendance.length})
+                                  <RefreshCw className={`w-4 h-4 ${isBiometricSyncing ? 'animate-spin' : ''}`} />
+                                  <span>سحب حركات البصمة الآن</span>
                                 </button>
-                              )}
-                            </>
-                          )}
-                        </div>
+                                <button
+                                  onClick={() => fileInputRef.current?.click()}
+                                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-sm flex items-center gap-2 cursor-pointer transition-colors"
+                                >
+                                  <FileSpreadsheet className="w-4 h-4" />
+                                  <span>استيراد ملفات البصمة (.dat)</span>
+                                </button>
+                                {attendance.length > 0 && selectedDate && (
+                                  <button
+                                    onClick={() => setSelectedDate('')}
+                                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer transition-colors"
+                                  >
+                                    إظهار كافة سجلات الحضور ({attendance.length})
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
                       </div>
                     </td>
                   </tr>
@@ -2956,8 +3011,12 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           isSyncing={isBiometricSyncing}
           logs={lastSyncResult?.logs || []}
           attendanceCount={lastSyncResult?.attendanceCount || 0}
-          newEmployeesCreated={lastSyncResult?.newEmployees || []}
-          device={lastSyncResult?.device || undefined}
+          newEmployees={lastSyncResult?.newEmployees || []}
+          device={lastSyncResult?.device || null}
+          onNavigateToAttendance={() => {
+            setShowBiometricSyncModal(false);
+            setActiveSubTab('daily');
+          }}
         />
       )}
 

@@ -168,16 +168,16 @@ export const BiometricDeviceModal: React.FC<BiometricDeviceModalProps> = ({
       username: formData.username?.trim() || 'admin',
       password: formData.password?.trim() || '0',
       location: formData.location?.trim() || '',
-      status: (formData.status as any) || 'online',
+      status: (formData.status as any) || 'offline',
       autoSyncEnabled: formData.autoSyncEnabled ?? true,
       autoSyncTime: formData.autoSyncTime || '23:59',
       syncFrequency: formData.syncFrequency || 'daily',
       lastSyncTime: formData.lastSyncTime || device?.lastSyncTime,
       lastSyncLogsCount: formData.lastSyncLogsCount || device?.lastSyncLogsCount || 0,
-      totalPunchesStored: formData.totalPunchesStored || device?.totalPunchesStored || 1420,
-      enrolledUsersCount: formData.enrolledUsersCount || device?.enrolledUsersCount || 25,
-      firmwareVersion: formData.firmwareVersion || device?.firmwareVersion || 'Ver 6.60',
-      serialNumber: formData.serialNumber || device?.serialNumber || 'ZKT-984210984',
+      totalPunchesStored: formData.totalPunchesStored !== undefined ? formData.totalPunchesStored : (device?.totalPunchesStored || 0),
+      enrolledUsersCount: formData.enrolledUsersCount !== undefined ? formData.enrolledUsersCount : (device?.enrolledUsersCount || 0),
+      firmwareVersion: formData.firmwareVersion || device?.firmwareVersion || '',
+      serialNumber: formData.serialNumber || device?.serialNumber || '',
       notes: formData.notes?.trim() || '',
     };
 
@@ -344,9 +344,14 @@ export const BiometricDeviceModal: React.FC<BiometricDeviceModalProps> = ({
                   />
                   <Server className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                 </div>
-                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                  العنوان الثابت للجهاز على الشبكة المحلية أو Cloud IP
-                </p>
+                <div className="mt-1 space-y-1">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    العنوان الثابت للجهاز على الشبكة المحلية أو عنوان الـ Public IP الخارجي / DDNS
+                  </p>
+                  <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-1.5 rounded-lg border border-amber-200 dark:border-amber-900/50">
+                    💡 <strong>توجيه المنافذ (Port Forwarding):</strong> إذا فتحت بورت 4370 في الراوتر، ضع هنا الـ <strong>Public IP</strong> للراوتر (وليس 192.168.2.254).
+                  </p>
+                </div>
               </div>
 
               <div>
