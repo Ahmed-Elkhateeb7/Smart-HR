@@ -169,12 +169,13 @@ export function loadAllState() {
     trainingCourses: cleanedCourses,
     trainingNominations: cleanedNominations,
     biometricDevices: (() => {
-      const devs = safeParse<BiometricDevice[]>(STORAGE_KEYS.BIOMETRIC_DEVICES, initialBiometricDevices);
-      if (!Array.isArray(devs) || devs.length === 0) {
-        safeSave(STORAGE_KEYS.BIOMETRIC_DEVICES, initialBiometricDevices);
-        return initialBiometricDevices;
+      const devs = safeParse<BiometricDevice[]>(STORAGE_KEYS.BIOMETRIC_DEVICES, []);
+      if (!Array.isArray(devs)) return [];
+      const cleaned = devs.filter((d) => d && d.id !== 'bio-dev-x628');
+      if (cleaned.length !== devs.length) {
+        safeSave(STORAGE_KEYS.BIOMETRIC_DEVICES, cleaned);
       }
-      return devs;
+      return cleaned;
     })(),
     biometricLogs: safeParse<BiometricPunchLog[]>(STORAGE_KEYS.BIOMETRIC_LOGS, initialBiometricLogs),
     biometricSettings: safeParse<BiometricSyncSettings>(STORAGE_KEYS.BIOMETRIC_SETTINGS, initialBiometricSettings),

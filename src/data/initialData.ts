@@ -108,30 +108,7 @@ export const initialTrainingCourses: TrainingCourse[] = [];
 
 export const initialTrainingNominations: TrainingNomination[] = [];
 
-export const initialBiometricDevices: BiometricDevice[] = [
-  {
-    id: 'bio-dev-x628',
-    name: 'جهاز البصمة الرئيسي (X628-TC)',
-    model: 'ZKTeco X628-TC/ID',
-    deviceType: 'fingerprint',
-    ip: '192.168.2.254',
-    port: 4370,
-    username: 'admin',
-    password: '0',
-    location: 'المقر الرئيسي - الإدارة',
-    status: 'online',
-    autoSyncEnabled: true,
-    autoSyncTime: '23:59',
-    syncFrequency: 'daily',
-    lastSyncTime: '2026-08-14 10:15:00',
-    lastSyncLogsCount: 77026,
-    totalPunchesStored: 77026,
-    enrolledUsersCount: 2334,
-    firmwareVersion: 'Ver 6.60 (Produce: 2015-10-10 13:33:52)',
-    serialNumber: '6336154100486',
-    notes: 'جهاز البصمة الرئيسي X628-TC/ID متصل بالشبكة المحلية',
-  },
-];
+export const initialBiometricDevices: BiometricDevice[] = [];
 
 export const initialBiometricLogs: BiometricPunchLog[] = [];
 
