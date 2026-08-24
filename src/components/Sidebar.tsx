@@ -18,7 +18,8 @@ import {
   Database,
   FileCheck,
   LogOut,
-  GraduationCap
+  GraduationCap,
+  Smartphone
 } from 'lucide-react';
 import { TabType } from '../types';
 

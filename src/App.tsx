@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Sparkles, Clock, ShieldAlert } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
@@ -14,6 +15,7 @@ import { DatabaseView } from './components/DatabaseView';
 import { DocumentsView } from './components/DocumentsView';
 import { TrainingView } from './components/TrainingView';
 import { LoginView } from './components/LoginView';
+import { MobileAttendanceView } from './components/mobile/MobileAttendanceView';
 
 import {
   initialEmployees,
@@ -77,7 +79,30 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem('isAuthenticated') === 'true';
   });
-  const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [isKioskUser, setIsKioskUser] = useState<boolean>(() => {
+    return localStorage.getItem('isKioskUser') === 'true';
+  });
+  const [isDemoUser, setIsDemoUser] = useState<boolean>(() => {
+    return localStorage.getItem('isDemoUser') === 'true';
+  });
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    if (typeof window !== 'undefined') {
+      if (window.location.hash === '#mobile' || window.location.pathname.includes('/attendance/mobile')) {
+        return 'mobile-attendance';
+      }
+    }
+    return 'dashboard';
+  });
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (window.location.hash === '#mobile' || window.location.pathname.includes('/attendance/mobile')) {
+        setActiveTab('mobile-attendance');
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
   const [darkMode, setDarkMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -651,10 +676,35 @@ export default function App() {
     setBiometricSettings(newSettings);
   };
 
+  const getRemainingTrialDays = () => {
+    const trialStart = localStorage.getItem('trialStartDate');
+    if (!trialStart) return 7;
+    const startDate = new Date(trialStart);
+    const now = new Date();
+    const diffTime = now.getTime() - startDate.getTime();
+    const elapsedDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const remaining = 7 - elapsedDays;
+    return remaining > 0 ? remaining : 0;
+  };
+
   const handleLogin = (password: string) => {
+    if (password === '1000') {
+      localStorage.setItem('isAuthenticated', 'true');
+      localStorage.setItem('isKioskUser', 'true');
+      localStorage.removeItem('isDemoUser');
+      setIsAuthenticated(true);
+      setIsKioskUser(true);
+      setIsDemoUser(false);
+      setActiveTab('mobile-attendance');
+      return { success: true };
+    }
     if (password === '1001') {
       localStorage.setItem('isAuthenticated', 'true');
+      localStorage.removeItem('isKioskUser');
+      localStorage.removeItem('isDemoUser');
       setIsAuthenticated(true);
+      setIsKioskUser(false);
+      setIsDemoUser(false);
       return { success: true };
     }
     if (password === '0000') {
@@ -666,15 +716,19 @@ export default function App() {
       
       const startDate = new Date(trialStart);
       const now = new Date();
-      const diffTime = Math.abs(now.getTime() - startDate.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      const diffTime = now.getTime() - startDate.getTime();
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
       
-      if (diffDays > 7) {
-        return { success: false, message: 'انتهت فترة التجربة (7 أيام). يرجى التواصل مع الإدارة.' };
+      if (diffDays >= 7) {
+        return { success: false, message: 'انتهت فترة التجربة المجانية (7 أيام). يرجى التواصل مع الإدارة لطلب التفعيل.' };
       }
       
       localStorage.setItem('isAuthenticated', 'true');
+      localStorage.setItem('isDemoUser', 'true');
+      localStorage.removeItem('isKioskUser');
       setIsAuthenticated(true);
+      setIsKioskUser(false);
+      setIsDemoUser(true);
       return { success: true };
     }
     return { success: false, message: 'كلمة المرور غير صحيحة' };
@@ -682,11 +736,32 @@ export default function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('isKioskUser');
+    localStorage.removeItem('isDemoUser');
     setIsAuthenticated(false);
+    setIsKioskUser(false);
+    setIsDemoUser(false);
   };
 
   if (!isAuthenticated) {
     return <LoginView onLogin={handleLogin} />;
+  }
+
+  if (isKioskUser) {
+    return (
+      <MobileAttendanceView
+        employees={employees}
+        companySettings={companySettings}
+        shifts={shifts}
+        attendanceRecords={attendanceRecords}
+        onAddAttendanceRecord={handleAddAttendanceRecord}
+        onUpdateAttendanceRecord={handleUpdateAttendanceRecord}
+        onRecordPunch={handleAddAttendanceRecord}
+        isStandalone={true}
+        isKiosk={true}
+        onLogout={handleLogout}
+      />
+    );
   }
 
   return (
@@ -703,6 +778,23 @@ export default function App() {
 
       {/* Main Content View Container */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Demo Mode Trial Banner */}
+        {isDemoUser && (
+          <div className="bg-gradient-to-r from-amber-600 via-amber-700 to-orange-700 text-white px-4 py-2 flex flex-wrap items-center justify-between text-xs font-bold shadow-md z-30 gap-2 border-b border-amber-500/30">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-amber-200 animate-pulse shrink-0" />
+              <span>نسخة تجريبية ديمو (صلاحيات مسؤول كاملة)</span>
+              <span className="bg-slate-950/40 border border-amber-300/30 px-2 py-0.5 rounded-full text-[11px] font-mono text-amber-200">
+                متبقي {getRemainingTrialDays()} أيام من تجربة السيستم (أسبوع)
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-[11px] text-amber-100/90 font-medium">
+              <Clock className="w-3.5 h-3.5" />
+              <span>رمز الدخول للتجربة: 0000</span>
+            </div>
+          </div>
+        )}
+
         {/* Top Header */}
         <Header
           activeTab={activeTab}
@@ -812,6 +904,30 @@ export default function App() {
               onClearBiometricLogs={handleClearBiometricLogs}
               biometricSettings={biometricSettings}
               onUpdateBiometricSettings={handleUpdateBiometricSettings}
+              onOpenMobilePortal={() => setActiveTab('mobile-attendance')}
+            />
+          )}
+
+          {activeTab === 'mobile-attendance' && (
+            <MobileAttendanceView
+              employees={employees}
+              shifts={shifts}
+              companySettings={companySettings}
+              attendanceRecords={attendanceRecords}
+              onRecordPunch={(newRec) => {
+                setAttendanceRecords((prev) => {
+                  const existingIdx = prev.findIndex(
+                    (r) => r.employeeId === newRec.employeeId && r.date === newRec.date
+                  );
+                  if (existingIdx >= 0) {
+                    const copy = [...prev];
+                    copy[existingIdx] = { ...copy[existingIdx], ...newRec };
+                    return copy;
+                  }
+                  return [newRec, ...prev];
+                });
+              }}
+              onBackToDashboard={() => setActiveTab('attendance')}
             />
           )}
 

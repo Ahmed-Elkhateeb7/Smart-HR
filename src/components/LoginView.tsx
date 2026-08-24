@@ -69,6 +69,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                     dir="ltr"
                   />
                 </div>
+
               </div>
 
               {error && (

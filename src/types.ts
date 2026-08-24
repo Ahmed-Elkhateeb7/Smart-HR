@@ -10,7 +10,8 @@ export type TabType =
   | 'settings'
   | 'database'
   | 'documents'
-  | 'employee_effects';
+  | 'employee_effects'
+  | 'mobile-attendance';
 
 export type EmployeeStatus = 'active' | 'on_leave' | 'suspended' | 'resigned';
 
@@ -64,6 +65,19 @@ export interface AttendanceRecord {
   status: AttendanceStatus;
   shiftName: string;
   notes?: string;
+  // GPS & Mobile Geofence tracking fields
+  userLat?: number;
+  userLng?: number;
+  distanceMeters?: number;
+  geofenceStatus?: 'in_range' | 'out_of_range';
+  verificationMethod?: 'gps_mobile' | 'biometric' | 'manual' | 'system';
+  mobileDeviceName?: string;
+  checkInLat?: number;
+  checkInLng?: number;
+  checkInDistance?: number;
+  checkOutLat?: number;
+  checkOutLng?: number;
+  checkOutDistance?: number;
 }
 
 export interface Shift {
@@ -167,6 +181,38 @@ export interface CompanySettings {
   currencySymbol: string; // "ج.م"
   workDaysPerMonth: number; // e.g. 22 or 30
   logoUrl?: string; // Company logo data URL or path
+  // Geofence & Mobile Attendance Settings
+  companyLat?: number; // خط العرض لمقر الشركة
+  companyLng?: number; // خط الطول لمقر الشركة
+  allowedRadiusMeters?: number; // نصف القطر المسموح به بالمتر (الافتراضي 50 متراً)
+  companyAddress?: string; // عنوان أو اسم مقر الشركة
+  enableGeofenceAttendance?: boolean; // تفعيل ميزة حضور الموبايل بالموقع الجغرافي
+  allowOutsideGeofenceWithWarning?: boolean; // السماح بالتسجيل خارج النطاق مع إشعار تحذيري
+}
+
+export interface MobilePunchPayload {
+  employeeId: string;
+  employeeCode?: string;
+  employeeName?: string;
+  punchType: 'check_in' | 'check_out';
+  userLat: number;
+  userLng: number;
+  accuracyMeters?: number;
+  notes?: string;
+  deviceInfo?: string;
+}
+
+export interface MobilePunchResult {
+  success: boolean;
+  inRange: boolean;
+  distanceMeters: number;
+  allowedRadiusMeters: number;
+  punchType: 'check_in' | 'check_out';
+  timestamp: string;
+  timeStr: string;
+  dateStr: string;
+  message: string;
+  record?: AttendanceRecord;
 }
 
 export interface DocumentItem {

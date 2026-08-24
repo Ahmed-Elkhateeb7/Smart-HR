@@ -221,6 +221,123 @@ app.post('/api/ai/audit-payroll', async (req, res) => {
   }
 });
 
+// Mobile Attendance & Geofencing Endpoints
+function calculateHaversineDistanceServer(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return Infinity;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const radLat1 = toRad(lat1);
+  const radLat2 = toRad(lat2);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(radLat1) * Math.cos(radLat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(6371000 * c * 10) / 10;
+}
+
+app.post('/api/attendance/geofence-calculate', (req, res) => {
+  const { userLat, userLng, companyLat, companyLng, allowedRadius = 50 } = req.body || {};
+  const uLat = Number(userLat);
+  const uLng = Number(userLng);
+  const cLat = Number(companyLat);
+  const cLng = Number(companyLng);
+  const radius = Number(allowedRadius) || 50;
+
+  if (isNaN(uLat) || isNaN(uLng) || isNaN(cLat) || isNaN(cLng)) {
+    return res.status(400).json({
+      success: false,
+      message: 'إحداثيات غير صالحة. يرجى توفير خط العرض وخط الطول بدقة.',
+    });
+  }
+
+  const distance = calculateHaversineDistanceServer(uLat, uLng, cLat, cLng);
+  const inRange = distance <= radius;
+
+  return res.json({
+    success: true,
+    inRange,
+    distanceMeters: distance,
+    allowedRadiusMeters: radius,
+    differenceMeters: Math.round(Math.abs(distance - radius) * 10) / 10,
+    message: inRange
+      ? `الموظف داخل النطاق الجغرافي المسموح (المسافة: ${distance} متر)`
+      : `الموظف خارج النطاق الجغرافي بمسافة (${distance} متر). الحد الأقصى هو ${radius} متر.`,
+  });
+});
+
+app.post('/api/attendance/mobile-punch', (req, res) => {
+  const {
+    employeeId,
+    employeeCode,
+    employeeName,
+    punchType = 'check_in',
+    userLat,
+    userLng,
+    companyLat = 30.0444,
+    companyLng = 31.2357,
+    allowedRadius = 50,
+    allowOutside = false,
+  } = req.body || {};
+
+  const uLat = Number(userLat);
+  const uLng = Number(userLng);
+  const cLat = Number(companyLat);
+  const cLng = Number(companyLng);
+  const radius = Number(allowedRadius) || 50;
+
+  if (isNaN(uLat) || isNaN(uLng)) {
+    return res.status(400).json({
+      success: false,
+      inRange: false,
+      message: 'تعذر التحقق من الموقع: يرجى تفعيل إذن الـ GPS في هاتفك والتقاط الإحداثيات قبل التسجيل.',
+    });
+  }
+
+  const distance = calculateHaversineDistanceServer(uLat, uLng, cLat, cLng);
+  const inRange = distance <= radius;
+
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const dateStr = `${year}-${month}-${day}`;
+  const timeStr = `${hours}:${minutes}`;
+  const timestamp = `${dateStr} ${timeStr}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+  if (!inRange && !allowOutside) {
+    return res.json({
+      success: false,
+      inRange: false,
+      distanceMeters: distance,
+      allowedRadiusMeters: radius,
+      punchType,
+      timestamp,
+      timeStr,
+      dateStr,
+      message: `عذراً! أنت خارج النطاق الجغرافي لمقر الشركة بمسافة (${distance} متر). الحد الأقصى المسموح به هو (${radius} متر).`,
+    });
+  }
+
+  return res.json({
+    success: true,
+    inRange,
+    distanceMeters: distance,
+    allowedRadiusMeters: radius,
+    punchType,
+    timestamp,
+    timeStr,
+    dateStr,
+    message:
+      punchType === 'check_in'
+        ? `تم تسجيل حضورك بنجاح (${inRange ? 'داخل النطاق' : 'خارج النطاق مع تنبيه'}) على بُعد ${distance} متر!`
+        : `تم تسجيل انصرافك بنجاح (${inRange ? 'داخل النطاق' : 'خارج النطاق مع تنبيه'}) على بُعد ${distance} متر!`,
+  });
+});
+
 // Biometric Endpoint 1: Real TCP/IP Network Connection Diagnostic
 app.post('/api/biometric/test-device', async (req, res) => {
   const { ip = '', port = 4370, timeout = 3500 } = req.body || {};

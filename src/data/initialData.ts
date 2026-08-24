@@ -102,6 +102,12 @@ export const initialCompanySettings: CompanySettings = {
   enableSmartGuard: true,
   currencySymbol: 'ج.م',
   workDaysPerMonth: 30,
+  companyLat: 30.0444, // Default HQ Latitude (القاهرة)
+  companyLng: 31.2357, // Default HQ Longitude (القاهرة)
+  allowedRadiusMeters: 50, // 50m default geofence radius
+  companyAddress: 'المقر الرئيسي للشركة',
+  enableGeofenceAttendance: true,
+  allowOutsideGeofenceWithWarning: false,
 };
 
 export const initialTrainingCourses: TrainingCourse[] = [];
