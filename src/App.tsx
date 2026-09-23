@@ -79,20 +79,16 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem('isAuthenticated') === 'true';
   });
-  const [isKioskUser, setIsKioskUser] = useState<boolean>(() => {
-    return localStorage.getItem('isKioskUser') === 'true';
-  });
+  const [isKioskUser, setIsKioskUser] = useState<boolean>(false);
   const [isDemoUser, setIsDemoUser] = useState<boolean>(() => {
     return localStorage.getItem('isDemoUser') === 'true';
   });
-  const [activeTab, setActiveTab] = useState<TabType>(() => {
-    if (typeof window !== 'undefined') {
-      if (window.location.hash === '#mobile' || window.location.pathname.includes('/attendance/mobile')) {
-        return 'mobile-attendance';
-      }
-    }
-    return 'dashboard';
-  });
+  const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+
+  // Clean up any stale kiosk lock on startup to guarantee opening on Dashboard
+  useEffect(() => {
+    localStorage.removeItem('isKioskUser');
+  }, []);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -688,23 +684,19 @@ export default function App() {
   };
 
   const handleLogin = (password: string) => {
-    if (password === '1000') {
-      localStorage.setItem('isAuthenticated', 'true');
-      localStorage.setItem('isKioskUser', 'true');
-      localStorage.removeItem('isDemoUser');
-      setIsAuthenticated(true);
-      setIsKioskUser(true);
-      setIsDemoUser(false);
-      setActiveTab('mobile-attendance');
-      return { success: true };
+    // Clear any hash if present to guarantee clean dashboard landing
+    if (typeof window !== 'undefined' && window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname);
     }
-    if (password === '1001') {
+
+    if (password === '1000' || password === '1001') {
       localStorage.setItem('isAuthenticated', 'true');
       localStorage.removeItem('isKioskUser');
       localStorage.removeItem('isDemoUser');
       setIsAuthenticated(true);
       setIsKioskUser(false);
       setIsDemoUser(false);
+      setActiveTab('dashboard');
       return { success: true };
     }
     if (password === '0000') {
@@ -729,6 +721,7 @@ export default function App() {
       setIsAuthenticated(true);
       setIsKioskUser(false);
       setIsDemoUser(true);
+      setActiveTab('dashboard');
       return { success: true };
     }
     return { success: false, message: 'كلمة المرور غير صحيحة' };
@@ -741,6 +734,10 @@ export default function App() {
     setIsAuthenticated(false);
     setIsKioskUser(false);
     setIsDemoUser(false);
+    setActiveTab('dashboard');
+    if (typeof window !== 'undefined' && window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
   };
 
   if (!isAuthenticated) {
