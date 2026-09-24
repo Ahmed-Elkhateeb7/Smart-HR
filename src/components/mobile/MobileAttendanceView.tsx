@@ -73,6 +73,7 @@ export const MobileAttendanceView: React.FC<MobileAttendanceViewProps> = ({
       if (locked && employees.some(e => e.id === locked)) {
         return locked;
       }
+      return '';
     }
     return localStorage.getItem('last_mobile_emp_id') || (employees[0]?.id || '');
   });
@@ -102,26 +103,6 @@ export const MobileAttendanceView: React.FC<MobileAttendanceViewProps> = ({
   const [punchResult, setPunchResult] = useState<MobilePunchResult | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Admin unlock modal state
-  const [showUnlockModal, setShowUnlockModal] = useState(false);
-  const [adminPasswordInput, setAdminPasswordInput] = useState('');
-  const [adminPasswordError, setAdminPasswordError] = useState('');
-
-  // Admin unlock handler for kiosk employee change
-  const handleVerifyAdminPassword = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (adminPasswordInput.trim() === '1001') {
-      setIsEmpLocked(false);
-      localStorage.removeItem('kiosk_locked_emp_id');
-      setShowEmpSelector(true);
-      setShowUnlockModal(false);
-      setAdminPasswordInput('');
-      setAdminPasswordError('');
-    } else {
-      setAdminPasswordError('كلمة المرور غير صحيحة! يرجى إدخال باسورد المسؤول');
-    }
-  };
-
   // Clock interval
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -129,8 +110,15 @@ export const MobileAttendanceView: React.FC<MobileAttendanceViewProps> = ({
   }, []);
 
   const selectedEmployee = useMemo(() => {
-    return employees.find((e) => e.id === selectedEmpId) || employees[0] || null;
-  }, [employees, selectedEmpId]);
+    if (selectedEmpId) {
+      const found = employees.find((e) => e.id === selectedEmpId);
+      if (found) return found;
+    }
+    if (isKiosk && !isEmpLocked) {
+      return null;
+    }
+    return employees[0] || null;
+  }, [employees, selectedEmpId, isKiosk, isEmpLocked]);
 
   // Company HQ coordinates
   const companyLat = companySettings.companyLat ?? 30.0444;
@@ -178,7 +166,7 @@ export const MobileAttendanceView: React.FC<MobileAttendanceViewProps> = ({
     fetchLocation();
   }, [fetchLocation]);
 
-  // Handle employee selection
+  // Handle employee selection - One-time permanent lock for kiosk mode (password 1000)
   const handleSelectEmployee = (emp: Employee) => {
     setSelectedEmpId(emp.id);
     if (isKiosk) {
@@ -211,14 +199,16 @@ export const MobileAttendanceView: React.FC<MobileAttendanceViewProps> = ({
         r.date === todayStr &&
         (r.employeeId === selectedEmployee.id ||
           r.employeeId === `emp-dat-${selectedEmployee.employeeCode}` ||
-          r.employeeId === selectedEmployee.employeeCode)
+          r.employeeId === selectedEmployee.employeeCode ||
+          (selectedEmployee.employeeCode && r.employeeId === selectedEmployee.employeeCode.replace(/^0+/, '')) ||
+          r.employeeName === selectedEmployee.name)
     );
   }, [attendanceRecords, selectedEmployee, todayStr]);
 
   // Handle Punch (Check-In or Check-Out)
   const handlePunch = async (punchType: 'check_in' | 'check_out') => {
     if (!selectedEmployee) {
-      alert('يرجى اختيار الموظف أولاً.');
+      alert('يرجى اختيار الموظف أولاً لربطه بهذا الجهاز.');
       return;
     }
 
@@ -272,6 +262,10 @@ export const MobileAttendanceView: React.FC<MobileAttendanceViewProps> = ({
       // Update existing record for today
       recordToSave = {
         ...todayRecord,
+        employeeId: selectedEmployee.id,
+        employeeName: selectedEmployee.name,
+        department: selectedEmployee.department || todayRecord.department || 'عام',
+        date: todayStr,
         checkIn: punchType === 'check_in' ? timeNow : (todayRecord.checkIn || timeNow),
         checkOut: punchType === 'check_out' ? timeNow : (todayRecord.checkOut || '-'),
         userLat: activeGps.latitude,
@@ -293,13 +287,33 @@ export const MobileAttendanceView: React.FC<MobileAttendanceViewProps> = ({
       }
 
       const fixed = fixAttendanceRecord(recordToSave, shifts);
-      if (onRecordPunch) {
-        onRecordPunch(fixed);
-      }
+
+      // Direct persistent save to ensure instant appearance in AttendanceView
+      try {
+        const stored = localStorage.getItem('hr_app_attendance_v1');
+        let currentRecords: AttendanceRecord[] = stored ? JSON.parse(stored) : [];
+        if (!Array.isArray(currentRecords)) currentRecords = [];
+        const idx = currentRecords.findIndex(
+          (r) =>
+            r.id === fixed.id ||
+            (r.date === fixed.date &&
+              (r.employeeId === fixed.employeeId ||
+                r.employeeName === fixed.employeeName ||
+                (fixed.employeeId && r.employeeId?.replace('emp-dat-', '') === fixed.employeeId)))
+        );
+        if (idx >= 0) {
+          currentRecords[idx] = { ...currentRecords[idx], ...fixed };
+        } else {
+          currentRecords = [fixed, ...currentRecords];
+        }
+        localStorage.setItem('hr_app_attendance_v1', JSON.stringify(currentRecords));
+      } catch {}
+
       if (onUpdateAttendanceRecord) {
         onUpdateAttendanceRecord(fixed);
-      }
-      if (onAddAttendanceRecord) {
+      } else if (onRecordPunch) {
+        onRecordPunch(fixed);
+      } else if (onAddAttendanceRecord) {
         onAddAttendanceRecord(fixed);
       }
       result.record = fixed;
@@ -332,13 +346,33 @@ export const MobileAttendanceView: React.FC<MobileAttendanceViewProps> = ({
       };
 
       const fixed = fixAttendanceRecord(recordToSave, shifts);
-      if (onRecordPunch) {
-        onRecordPunch(fixed);
-      }
+
+      // Direct persistent save to ensure instant appearance in AttendanceView
+      try {
+        const stored = localStorage.getItem('hr_app_attendance_v1');
+        let currentRecords: AttendanceRecord[] = stored ? JSON.parse(stored) : [];
+        if (!Array.isArray(currentRecords)) currentRecords = [];
+        const idx = currentRecords.findIndex(
+          (r) =>
+            r.id === fixed.id ||
+            (r.date === fixed.date &&
+              (r.employeeId === fixed.employeeId ||
+                r.employeeName === fixed.employeeName ||
+                (fixed.employeeId && r.employeeId?.replace('emp-dat-', '') === fixed.employeeId)))
+        );
+        if (idx >= 0) {
+          currentRecords[idx] = { ...currentRecords[idx], ...fixed };
+        } else {
+          currentRecords = [fixed, ...currentRecords];
+        }
+        localStorage.setItem('hr_app_attendance_v1', JSON.stringify(currentRecords));
+      } catch {}
+
       if (onAddAttendanceRecord) {
         onAddAttendanceRecord(fixed);
-      }
-      if (onUpdateAttendanceRecord) {
+      } else if (onRecordPunch) {
+        onRecordPunch(fixed);
+      } else if (onUpdateAttendanceRecord) {
         onUpdateAttendanceRecord(fixed);
       }
       result.record = fixed;
@@ -416,19 +450,14 @@ export const MobileAttendanceView: React.FC<MobileAttendanceViewProps> = ({
             </span>
 
             {isKiosk && isEmpLocked ? (
-              <button
-                onClick={() => {
-                  setAdminPasswordInput('');
-                  setAdminPasswordError('');
-                  setShowUnlockModal(true);
-                }}
-                className="px-2.5 py-1 rounded-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
-                title="انقر لتعديل الموظف باستخدام باسورد المسؤول"
+              <div
+                className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold flex items-center gap-1.5 shadow-sm"
+                title="تم ربط هذا الجهاز بالموظف نهائياً وغير مسموح بالتبديل"
               >
-                <Lock className="w-3 h-3 text-amber-400" />
-                <span>مقفل (تعديل الموظف)</span>
-              </button>
-            ) : (
+                <Lock className="w-3 h-3 text-emerald-400" />
+                <span>مقفل نهائياً (غير مسموح بالتبديل)</span>
+              </div>
+            ) : !isKiosk ? (
               <button
                 onClick={() => setShowEmpSelector(!showEmpSelector)}
                 className="text-xs text-blue-400 hover:text-blue-300 font-bold flex items-center gap-1 transition-colors"
@@ -436,17 +465,17 @@ export const MobileAttendanceView: React.FC<MobileAttendanceViewProps> = ({
                 <span>{showEmpSelector ? 'إغلاق' : 'تبديل الموظف'}</span>
                 <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showEmpSelector ? 'rotate-90' : ''}`} />
               </button>
-            )}
+            ) : null}
           </div>
 
           {isKiosk && !isEmpLocked && (
-            <div className="p-3 rounded-2xl bg-indigo-950/80 border border-indigo-700/70 text-indigo-200 text-xs space-y-1">
-              <div className="font-extrabold text-indigo-300 flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-indigo-400" />
-                <span>إدخال الموظف لمرة واحدة (رمز 1000)</span>
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs space-y-1.5 animate-in fade-in">
+              <div className="font-extrabold text-amber-300 flex items-center gap-1.5 text-xs">
+                <Lock className="w-4 h-4 text-amber-400" />
+                <span>إدخال وتحديد الموظف (لمرة واحدة فقط - مستخدم 1000)</span>
               </div>
-              <p className="text-[11px] text-indigo-200/90 leading-relaxed">
-                اختر الموظف الخاص بهذا الجهاز لربطه فورياً. تنبيه: لن يتم السماح بتبديل الموظف بعد الاختيار.
+              <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                يرجى اختيار الموظف المخصص لهذا الجهاز بدقة؛ سيتم قفل الجهاز وربطه بالموظف نهائياً ولن يُسمح بتغيير أو تبديل الموظف بعد الاختيار.
               </p>
             </div>
           )}
@@ -620,9 +649,15 @@ export const MobileAttendanceView: React.FC<MobileAttendanceViewProps> = ({
 
         {/* Action Buttons */}
         <div className="space-y-2.5 pt-2">
+          {isKiosk && !selectedEmployee && (
+            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs text-center font-bold">
+              يرجى اختيار الموظف أولاً من القائمة أعلاه لتثبيته على هذا الجهاز وتسجيل الحضور والانصراف.
+            </div>
+          )}
+
           <button
             onClick={() => handlePunch('check_in')}
-            disabled={isPunching || isLocating}
+            disabled={isPunching || isLocating || !selectedEmployee}
             className={`w-full py-4 px-6 rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-lg active:scale-98 cursor-pointer disabled:opacity-50 ${
               isInRange
                 ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-600/30'
@@ -639,7 +674,7 @@ export const MobileAttendanceView: React.FC<MobileAttendanceViewProps> = ({
 
           <button
             onClick={() => handlePunch('check_out')}
-            disabled={isPunching || isLocating}
+            disabled={isPunching || isLocating || !selectedEmployee}
             className={`w-full py-4 px-6 rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-lg active:scale-98 cursor-pointer disabled:opacity-50 ${
               isInRange
                 ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white shadow-amber-600/30'
@@ -716,67 +751,6 @@ export const MobileAttendanceView: React.FC<MobileAttendanceViewProps> = ({
             >
               تم، العودة للشاشة
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* Admin Unlock Modal for Changing Kiosk Employee */}
-      {showUnlockModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl relative text-right">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto">
-              <Lock className="w-6 h-6" />
-            </div>
-
-            <div className="text-center space-y-1">
-              <h3 className="text-base font-extrabold text-white">تعديل الموظف المسجل</h3>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                يتطلب تغيير الموظف المسجل على هذا الجهاز إدخال كلمة مرور المسؤول
-              </p>
-            </div>
-
-            <form onSubmit={handleVerifyAdminPassword} className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  كلمة مرور المسؤول:
-                </label>
-                <input
-                  type="password"
-                  value={adminPasswordInput}
-                  onChange={(e) => setAdminPasswordInput(e.target.value)}
-                  placeholder="أدخل كلمة المرور..."
-                  autoFocus
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-amber-500 text-center font-mono tracking-widest"
-                  dir="ltr"
-                />
-              </div>
-
-              {adminPasswordError && (
-                <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs text-center font-medium">
-                  {adminPasswordError}
-                </div>
-              )}
-
-              <div className="flex gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowUnlockModal(false);
-                    setAdminPasswordInput('');
-                    setAdminPasswordError('');
-                  }}
-                  className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors cursor-pointer"
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black transition-colors cursor-pointer shadow-lg shadow-amber-500/20"
-                >
-                  تأكيد وفك القفل
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
