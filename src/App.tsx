@@ -726,7 +726,7 @@ export default function App() {
       return { success: true };
     }
 
-    if (password === '1001') {
+    if (password === '2005') {
       localStorage.setItem('isAuthenticated', 'true');
       localStorage.removeItem('isKioskUser');
       localStorage.removeItem('isDemoUser');
