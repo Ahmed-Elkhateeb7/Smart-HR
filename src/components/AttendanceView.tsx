@@ -400,6 +400,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   const [datImportSummary, setDatImportSummary] = useState<{
     filesCount: number;
     fileNames: string[];
+    fileFormats?: string[];
     totalLogsParsed: number;
     matchedCount: number;
     updatedDates: string[];
@@ -608,7 +609,276 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
     }
   };
 
-  const handleImportDatFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Helper: Normalize header string for resilient column detection
+  const normalizeHeader = (h: any): string => {
+    return String(h || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_\-\.\/\\:&]+/g, '');
+  };
+
+  // Helper: Resilient date parser for Excel dates, serial numbers, and diverse string formats
+  const parseDateVal = (val: any): string => {
+    if (!val) return '';
+    if (val instanceof Date) {
+      if (isNaN(val.getTime())) return '';
+      const y = val.getFullYear();
+      const m = String(val.getMonth() + 1).padStart(2, '0');
+      const d = String(val.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+    if (typeof val === 'number') {
+      try {
+        const parsed = XLSX.SSF.parse_date_code(val);
+        if (parsed && parsed.y > 1990) {
+          return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
+        }
+      } catch {
+        // fallback
+      }
+    }
+    const str = String(val).trim();
+    const m1 = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (m1) return `${m1[1]}-${m1[2].padStart(2, '0')}-${m1[3].padStart(2, '0')}`;
+    const m2 = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (m2) return `${m2[3]}-${m2[2].padStart(2, '0')}-${m2[1].padStart(2, '0')}`;
+    return '';
+  };
+
+  // Helper: Resilient time parser for Excel time fractions, 24h & 12h formats, and Date objects
+  const parseTimeVal = (val: any): string => {
+    if (!val) return '';
+    if (val instanceof Date) {
+      if (isNaN(val.getTime())) return '';
+      const h = String(val.getHours()).padStart(2, '0');
+      const m = String(val.getMinutes()).padStart(2, '0');
+      return `${h}:${m}`;
+    }
+    if (typeof val === 'number') {
+      const frac = val >= 1 ? val - Math.floor(val) : val;
+      if (frac > 0) {
+        const totalMinutes = Math.round(frac * 1440);
+        const h = Math.floor(totalMinutes / 60) % 24;
+        const m = totalMinutes % 60;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      }
+    }
+    const str = String(val).trim();
+    if (str === '-' || str === '--:--' || str === '') return '';
+    const m = str.match(/(\d{1,2}):(\d{2})/);
+    if (m) {
+      let h = parseInt(m[1], 10);
+      const min = m[2];
+      if (/pm|مساء/i.test(str) && h < 12) h += 12;
+      if (/am|صباح/i.test(str) && h === 12) h = 0;
+      return `${String(h).padStart(2, '0')}:${min}`;
+    }
+    return '';
+  };
+
+  // Helper: Detect column indices from header row
+  const detectHeaderIndices = (headerRow: any[]) => {
+    let idCol = -1;
+    let nameCol = -1;
+    let dateCol = -1;
+    let dateTimeCol = -1;
+    let checkInCol = -1;
+    let checkOutCol = -1;
+    let timeCol = -1;
+    let deptCol = -1;
+
+    headerRow.forEach((col, idx) => {
+      const n = normalizeHeader(col);
+      if (!n) return;
+
+      if (
+        idCol === -1 &&
+        (n.includes('كود') ||
+          n.includes('رقم') ||
+          n.includes('معرف') ||
+          n.includes('رمز') ||
+          n.includes('userid') ||
+          n.includes('empid') ||
+          n.includes('employeeid') ||
+          n.includes('employeecode') ||
+          n.includes('empcode') ||
+          n.includes('badgenumber') ||
+          n.includes('acno') ||
+          n === 'id' ||
+          n === 'pin' ||
+          n === 'code' ||
+          n === 'no')
+      ) {
+        idCol = idx;
+        return;
+      }
+      if (nameCol === -1 && (n.includes('اسم') || n.includes('name'))) {
+        nameCol = idx;
+        return;
+      }
+      if (
+        checkInCol === -1 &&
+        (n.includes('حضور') ||
+          n.includes('دخول') ||
+          n.includes('checkin') ||
+          n.includes('timein') ||
+          n.includes('clockin') ||
+          n.includes('firstin') ||
+          n === 'in')
+      ) {
+        checkInCol = idx;
+        return;
+      }
+      if (
+        checkOutCol === -1 &&
+        (n.includes('انصراف') ||
+          n.includes('خروج') ||
+          n.includes('checkout') ||
+          n.includes('timeout') ||
+          n.includes('clockout') ||
+          n.includes('lastout') ||
+          n === 'out')
+      ) {
+        checkOutCol = idx;
+        return;
+      }
+      if (
+        dateTimeCol === -1 &&
+        ((n.includes('تاريخ') && n.includes('وقت')) ||
+          (n.includes('date') && n.includes('time')) ||
+          n.includes('datetime') ||
+          n.includes('timestamp') ||
+          n.includes('checktime'))
+      ) {
+        dateTimeCol = idx;
+        return;
+      }
+      if (
+        dateCol === -1 &&
+        (n.includes('تاريخ') || n.includes('date') || n === 'day' || n === 'اليوم')
+      ) {
+        dateCol = idx;
+        return;
+      }
+      if (
+        timeCol === -1 &&
+        (n.includes('وقت') || n.includes('ساعة') || n.includes('time'))
+      ) {
+        timeCol = idx;
+        return;
+      }
+      if (
+        deptCol === -1 &&
+        (n.includes('قسم') ||
+          n.includes('ادارة') ||
+          n.includes('إدارة') ||
+          n.includes('فرع') ||
+          n.includes('dept') ||
+          n.includes('department'))
+      ) {
+        deptCol = idx;
+        return;
+      }
+    });
+
+    return { idCol, nameCol, dateCol, dateTimeCol, checkInCol, checkOutCol, timeCol, deptCol };
+  };
+
+  // Helper: Auto-parse rows without headers
+  const autoParseRowCells = (row: any[]) => {
+    let id = '';
+    let name = '';
+    let dept = '';
+    let dateStr = '';
+    const times: string[] = [];
+
+    for (const cell of row) {
+      if (cell == null || cell === '') continue;
+
+      if (cell instanceof Date) {
+        const d = parseDateVal(cell);
+        if (d && !dateStr) dateStr = d;
+        const t = parseTimeVal(cell);
+        if (t && t !== '00:00') times.push(t);
+        continue;
+      }
+
+      if (typeof cell === 'number') {
+        if (cell > 30000 && cell < 60000 && !dateStr) {
+          const d = parseDateVal(cell);
+          if (d) {
+            dateStr = d;
+            continue;
+          }
+        }
+        if (cell > 0 && cell < 1) {
+          const t = parseTimeVal(cell);
+          if (t) {
+            times.push(t);
+            continue;
+          }
+        }
+        if (!id) {
+          id = String(cell);
+          continue;
+        }
+      }
+
+      const str = String(cell).trim();
+      const dVal = parseDateVal(str);
+      if (dVal && !dateStr) {
+        dateStr = dVal;
+        continue;
+      }
+      const tVal = parseTimeVal(str);
+      if (tVal) {
+        times.push(tVal);
+        continue;
+      }
+      if (/^[\d]+$/.test(str) && !id) {
+        id = str;
+        continue;
+      }
+      if (/[\u0600-\u06FFa-zA-Z]/.test(str) && !name && str.length >= 2) {
+        name = str;
+        continue;
+      }
+    }
+
+    return { id, name, dept, dateStr, times };
+  };
+
+  // Download Sample Attendance Template (Excel .xlsx)
+  const handleDownloadAttendanceTemplate = () => {
+    const today = getTodayDateString();
+    const templateData = [
+      ['كود الموظف', 'اسم الموظف', 'التاريخ', 'وقت الحضور', 'وقت الانصراف', 'القسم', 'ملاحظات'],
+      ['101', 'أحمد محمود العلي', today, '08:00', '16:00', 'الإدارة العامة', 'حضور اعتيادي'],
+      ['102', 'سارة عبد الله الشمري', today, '08:15', '16:30', 'الموارد البشرية', 'دوام رسمي'],
+      ['103', 'محمد عبد الرحمن القحطاني', today, '08:05', '16:00', 'تقنية المعلومات', 'حضور'],
+      ['104', 'خالد إبراهيم المنصور', today, '08:30', '16:00', 'المبيعات والتسويق', 'تأخير بعذر'],
+      ['105', 'ريم عبد العزيز الدوسري', today, '08:00', '14:00', 'المالية والمحاسبة', 'انصراف مبكر بإذن'],
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(templateData);
+    ws['!cols'] = [
+      { wch: 14 },
+      { wch: 26 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 20 },
+      { wch: 22 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'نموذج_الحضور');
+    XLSX.writeFile(wb, `نموذج_استيراد_الحضور_والانصراف_${today}.xlsx`);
+    triggerNotification('تم تحميل نموذج إكسيل لاستيراد سجلات الحضور بنجاح.');
+  };
+
+  // Main multi-format attendance importer (CSV, XLS, XLSX, DAT, TXT)
+  const handleImportAttendanceFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
 
@@ -622,122 +892,449 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         punches: { dt: Date; dateStr: string; timeStr: string }[];
         rawId: string;
         extractedName?: string;
+        department?: string;
       }
     >();
 
+    // Direct daily records from Excel or CSV files with separate CheckIn / CheckOut columns
+    const directDailyRecords: {
+      rawId: string;
+      extractedName?: string;
+      department?: string;
+      date: string;
+      checkIn: string;
+      checkOut: string;
+      notes?: string;
+    }[] = [];
+
+    const fileFormatsSet = new Set<string>();
+
     for (const file of filesArray) {
-      try {
-        let text = '';
+      const fileNameLower = file.name.toLowerCase();
+      const ext = fileNameLower.split('.').pop() || '';
+
+      // --- FORMAT 1 & 2: Excel files (.xls, .xlsx) ---
+      if (ext === 'xlsx' || ext === 'xls') {
+        fileFormatsSet.add('Excel (.xls / .xlsx)');
         try {
           const buffer = await file.arrayBuffer();
-          // Attempt decoding as Windows-1256 (Arabic Windows ANSI used by biometric devices)
+          const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
+
+          for (const sheetName of wb.SheetNames) {
+            const ws = wb.Sheets[sheetName];
+            if (!ws) continue;
+            const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '' });
+            if (!rows || rows.length === 0) continue;
+
+            // Locate header row within first 5 rows
+            let headerIdx = -1;
+            let detected = {
+              idCol: -1,
+              nameCol: -1,
+              dateCol: -1,
+              dateTimeCol: -1,
+              checkInCol: -1,
+              checkOutCol: -1,
+              timeCol: -1,
+              deptCol: -1,
+            };
+
+            for (let r = 0; r < Math.min(5, rows.length); r++) {
+              const testRow = rows[r];
+              if (!Array.isArray(testRow)) continue;
+              const det = detectHeaderIndices(testRow);
+              if (
+                det.idCol !== -1 ||
+                det.dateTimeCol !== -1 ||
+                det.checkInCol !== -1 ||
+                det.timeCol !== -1
+              ) {
+                headerIdx = r;
+                detected = det;
+                break;
+              }
+            }
+
+            const startRow = headerIdx !== -1 ? headerIdx + 1 : 0;
+
+            for (let r = startRow; r < rows.length; r++) {
+              const row = rows[r];
+              if (!Array.isArray(row) || row.every((c) => c === '' || c == null)) continue;
+
+              // Case A: Header-based parsing
+              if (headerIdx !== -1) {
+                const rawId =
+                  detected.idCol !== -1
+                    ? String(row[detected.idCol] ?? '')
+                        .trim()
+                        .replace(/[\uFFFD\?]/g, '')
+                    : '';
+                const extractedName =
+                  detected.nameCol !== -1 ? String(row[detected.nameCol] ?? '').trim() : undefined;
+                const department =
+                  detected.deptCol !== -1 ? String(row[detected.deptCol] ?? '').trim() : undefined;
+
+                let dateStr = '';
+                if (detected.dateCol !== -1) {
+                  dateStr = parseDateVal(row[detected.dateCol]);
+                }
+                if (!dateStr && detected.dateTimeCol !== -1) {
+                  dateStr = parseDateVal(row[detected.dateTimeCol]);
+                }
+                if (!dateStr) {
+                  dateStr = selectedDate || getTodayDateString();
+                }
+
+                // If sheet has separate CheckIn / CheckOut columns (Direct Attendance Sheet format):
+                if (detected.checkInCol !== -1 || detected.checkOutCol !== -1) {
+                  const checkIn =
+                    detected.checkInCol !== -1 ? parseTimeVal(row[detected.checkInCol]) : '';
+                  const checkOut =
+                    detected.checkOutCol !== -1 ? parseTimeVal(row[detected.checkOutCol]) : '';
+
+                  if (rawId && (checkIn || checkOut)) {
+                    totalLogsParsed += (checkIn ? 1 : 0) + (checkOut ? 1 : 0);
+                    directDailyRecords.push({
+                      rawId,
+                      extractedName: extractedName || undefined,
+                      department: department || undefined,
+                      date: dateStr,
+                      checkIn: checkIn || '-',
+                      checkOut: checkOut || '-',
+                      notes: `تم الاستيراد من ملف إكسيل (${file.name})`,
+                    });
+                    continue;
+                  }
+                }
+
+                // If sheet is punch-log format (DateTime column or Time column):
+                let punchTime = '';
+                if (detected.dateTimeCol !== -1) {
+                  punchTime = parseTimeVal(row[detected.dateTimeCol]);
+                } else if (detected.timeCol !== -1) {
+                  punchTime = parseTimeVal(row[detected.timeCol]);
+                }
+
+                if (rawId && punchTime) {
+                  totalLogsParsed++;
+                  if (!userPunchesMap.has(rawId)) {
+                    userPunchesMap.set(rawId, { punches: [], rawId, extractedName, department });
+                  }
+                  const rec = userPunchesMap.get(rawId)!;
+                  if (extractedName && !rec.extractedName) rec.extractedName = extractedName;
+                  if (department && !rec.department) rec.department = department;
+
+                  const punchDt = new Date(`${dateStr}T${punchTime}:00`);
+                  if (!isNaN(punchDt.getTime())) {
+                    rec.punches.push({ dt: punchDt, dateStr, timeStr: punchTime });
+                  }
+                  continue;
+                }
+              }
+
+              // Case B: No header or unstructured row scan fallback
+              const autoParsed = autoParseRowCells(row);
+              if (autoParsed.id && (autoParsed.times.length > 0 || autoParsed.dateStr)) {
+                const dateStr = autoParsed.dateStr || selectedDate || getTodayDateString();
+                if (autoParsed.times.length >= 2) {
+                  totalLogsParsed += 2;
+                  directDailyRecords.push({
+                    rawId: autoParsed.id,
+                    extractedName: autoParsed.name || undefined,
+                    department: autoParsed.dept || undefined,
+                    date: dateStr,
+                    checkIn: autoParsed.times[0],
+                    checkOut: autoParsed.times[1],
+                    notes: `تم الاستيراد من ملف (${file.name})`,
+                  });
+                } else if (autoParsed.times.length === 1) {
+                  totalLogsParsed++;
+                  if (!userPunchesMap.has(autoParsed.id)) {
+                    userPunchesMap.set(autoParsed.id, {
+                      punches: [],
+                      rawId: autoParsed.id,
+                      extractedName: autoParsed.name,
+                      department: autoParsed.dept,
+                    });
+                  }
+                  const rec = userPunchesMap.get(autoParsed.id)!;
+                  const punchDt = new Date(`${dateStr}T${autoParsed.times[0]}:00`);
+                  if (!isNaN(punchDt.getTime())) {
+                    rec.punches.push({ dt: punchDt, dateStr, timeStr: autoParsed.times[0] });
+                  }
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Error reading Excel file:', err);
+        }
+      }
+
+      // --- FORMAT 3: CSV files (.csv) ---
+      else if (ext === 'csv') {
+        fileFormatsSet.add('CSV');
+        try {
+          const buffer = await file.arrayBuffer();
+          let text = '';
           try {
-            const winDecoder = new TextDecoder('windows-1256');
-            const winText = winDecoder.decode(buffer);
-            if (/[\u0600-\u06FF]/.test(winText) && !winText.includes('\uFFFD')) {
-              text = winText;
+            // First try UTF-8
+            const utfText = new TextDecoder('utf-8').decode(buffer);
+            if (!utfText.includes('\uFFFD')) {
+              text = utfText;
             } else {
-              text = new TextDecoder('utf-8').decode(buffer);
+              // Try windows-1256 for Arabic CSV files exported from older systems
+              text = new TextDecoder('windows-1256').decode(buffer);
             }
           } catch {
-            text = new TextDecoder('utf-8').decode(buffer);
+            text = await file.text();
           }
 
-          if (text.includes('\uFFFD')) {
-            try {
-              text = new TextDecoder('windows-1256').decode(buffer);
-            } catch {
-              // fallback
-            }
-          }
-        } catch {
-          text = await file.text();
-        }
+          // Use XLSX.read for CSV parsing - handles quotes, commas, semicolons, tabs, newlines
+          const wb = XLSX.read(text, { type: 'string', cellDates: true });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          if (ws) {
+            const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '' });
 
-        const lines = text.split(/\r?\n/);
+            // Locate header row within first 5 rows
+            let headerIdx = -1;
+            let detected = {
+              idCol: -1,
+              nameCol: -1,
+              dateCol: -1,
+              dateTimeCol: -1,
+              checkInCol: -1,
+              checkOutCol: -1,
+              timeCol: -1,
+              deptCol: -1,
+            };
 
-        const fileNameLower = file.name.toLowerCase();
-        const isExitFile =
-          fileNameLower.includes('attlog1') ||
-          fileNameLower.includes('out') ||
-          fileNameLower.includes('exit') ||
-          fileNameLower.includes('خروج') ||
-          fileNameLower.includes('انصراف');
-        const isEntryFile =
-          (fileNameLower.includes('attlog') && !isExitFile) ||
-          fileNameLower.includes('in') ||
-          fileNameLower.includes('entry') ||
-          fileNameLower.includes('دخول') ||
-          fileNameLower.includes('حضور');
-
-        for (const line of lines) {
-          const cleanLine = line.replace(/[\t,;]/g, ' ').trim();
-          if (!cleanLine) continue;
-
-          const parts = cleanLine.split(/\s+/);
-          if (parts.length < 2) continue;
-
-          const rawId = parts[0].replace(/[\uFFFD\?]/g, '').trim();
-          if (!rawId) continue;
-
-          let foundDate = '';
-          let foundTime = '';
-          const textTokens: string[] = [];
-
-          for (let i = 0; i < parts.length; i++) {
-            const p = parts[i];
-            if (!foundDate && (/\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(p) || /\d{1,2}[-/]\d{1,2}[-/]\d{4}/.test(p))) {
-              const dClean = p.replace(/\//g, '-');
-              const dParts = dClean.split('-');
-              if (dParts[0].length === 4) {
-                foundDate = `${dParts[0]}-${dParts[1].padStart(2, '0')}-${dParts[2].padStart(2, '0')}`;
-              } else if (dParts[2].length === 4) {
-                foundDate = `${dParts[2]}-${dParts[1].padStart(2, '0')}-${dParts[0].padStart(2, '0')}`;
-              } else {
-                foundDate = dClean;
+            for (let r = 0; r < Math.min(5, rows.length); r++) {
+              const testRow = rows[r];
+              if (!Array.isArray(testRow)) continue;
+              const det = detectHeaderIndices(testRow);
+              if (
+                det.idCol !== -1 ||
+                det.dateTimeCol !== -1 ||
+                det.checkInCol !== -1 ||
+                det.timeCol !== -1
+              ) {
+                headerIdx = r;
+                detected = det;
+                break;
               }
-            } else if (!foundTime && /^\d{1,2}:\d{2}(:\d{2})?$/.test(p)) {
-              const tParts = p.split(':');
-              foundTime = `${tParts[0].padStart(2, '0')}:${tParts[1].padStart(2, '0')}`;
-            } else if (i > 0 && isNaN(Number(p)) && p.length > 1) {
-              const cleanP = p.replace(/[\uFFFD\?]/g, '').trim();
-              if (cleanP) textTokens.push(cleanP);
+            }
+
+            const startRow = headerIdx !== -1 ? headerIdx + 1 : 0;
+
+            for (let r = startRow; r < rows.length; r++) {
+              const row = rows[r];
+              if (!Array.isArray(row) || row.every((c) => c === '' || c == null)) continue;
+
+              if (headerIdx !== -1) {
+                const rawId =
+                  detected.idCol !== -1
+                    ? String(row[detected.idCol] ?? '')
+                        .trim()
+                        .replace(/[\uFFFD\?]/g, '')
+                    : '';
+                const extractedName =
+                  detected.nameCol !== -1 ? String(row[detected.nameCol] ?? '').trim() : undefined;
+                const department =
+                  detected.deptCol !== -1 ? String(row[detected.deptCol] ?? '').trim() : undefined;
+
+                let dateStr = '';
+                if (detected.dateCol !== -1) dateStr = parseDateVal(row[detected.dateCol]);
+                if (!dateStr && detected.dateTimeCol !== -1)
+                  dateStr = parseDateVal(row[detected.dateTimeCol]);
+                if (!dateStr) dateStr = selectedDate || getTodayDateString();
+
+                if (detected.checkInCol !== -1 || detected.checkOutCol !== -1) {
+                  const checkIn =
+                    detected.checkInCol !== -1 ? parseTimeVal(row[detected.checkInCol]) : '';
+                  const checkOut =
+                    detected.checkOutCol !== -1 ? parseTimeVal(row[detected.checkOutCol]) : '';
+
+                  if (rawId && (checkIn || checkOut)) {
+                    totalLogsParsed += (checkIn ? 1 : 0) + (checkOut ? 1 : 0);
+                    directDailyRecords.push({
+                      rawId,
+                      extractedName: extractedName || undefined,
+                      department: department || undefined,
+                      date: dateStr,
+                      checkIn: checkIn || '-',
+                      checkOut: checkOut || '-',
+                      notes: `تم الاستيراد من ملف CSV (${file.name})`,
+                    });
+                    continue;
+                  }
+                }
+
+                let punchTime = '';
+                if (detected.dateTimeCol !== -1) {
+                  punchTime = parseTimeVal(row[detected.dateTimeCol]);
+                } else if (detected.timeCol !== -1) {
+                  punchTime = parseTimeVal(row[detected.timeCol]);
+                }
+
+                if (rawId && punchTime) {
+                  totalLogsParsed++;
+                  if (!userPunchesMap.has(rawId)) {
+                    userPunchesMap.set(rawId, { punches: [], rawId, extractedName, department });
+                  }
+                  const rec = userPunchesMap.get(rawId)!;
+                  if (extractedName && !rec.extractedName) rec.extractedName = extractedName;
+                  if (department && !rec.department) rec.department = department;
+
+                  const punchDt = new Date(`${dateStr}T${punchTime}:00`);
+                  if (!isNaN(punchDt.getTime())) {
+                    rec.punches.push({ dt: punchDt, dateStr, timeStr: punchTime });
+                  }
+                  continue;
+                }
+              }
+
+              // Fallback without headers
+              const autoParsed = autoParseRowCells(row);
+              if (autoParsed.id && (autoParsed.times.length > 0 || autoParsed.dateStr)) {
+                const dateStr = autoParsed.dateStr || selectedDate || getTodayDateString();
+                if (autoParsed.times.length >= 2) {
+                  totalLogsParsed += 2;
+                  directDailyRecords.push({
+                    rawId: autoParsed.id,
+                    extractedName: autoParsed.name || undefined,
+                    department: autoParsed.dept || undefined,
+                    date: dateStr,
+                    checkIn: autoParsed.times[0],
+                    checkOut: autoParsed.times[1],
+                    notes: `تم الاستيراد من ملف (${file.name})`,
+                  });
+                } else if (autoParsed.times.length === 1) {
+                  totalLogsParsed++;
+                  if (!userPunchesMap.has(autoParsed.id)) {
+                    userPunchesMap.set(autoParsed.id, {
+                      punches: [],
+                      rawId: autoParsed.id,
+                      extractedName: autoParsed.name,
+                      department: autoParsed.dept,
+                    });
+                  }
+                  const rec = userPunchesMap.get(autoParsed.id)!;
+                  const punchDt = new Date(`${dateStr}T${autoParsed.times[0]}:00`);
+                  if (!isNaN(punchDt.getTime())) {
+                    rec.punches.push({ dt: punchDt, dateStr, timeStr: autoParsed.times[0] });
+                  }
+                }
+              }
             }
           }
-
-          if (!foundDate) {
-            foundDate = selectedDate || getTodayDateString();
-          }
-
-          if (!foundTime) continue;
-          totalLogsParsed++;
-
-          const rawExtracted = textTokens.join(' ').replace(/[\uFFFD\?]/g, '').trim();
-          const hasLetters = /[\u0600-\u06FFa-zA-Z]/.test(rawExtracted);
-          const extractedName = hasLetters && rawExtracted.length >= 2 ? rawExtracted : undefined;
-
-          if (!userPunchesMap.has(rawId)) {
-            userPunchesMap.set(rawId, {
-              punches: [],
-              rawId,
-              extractedName,
-            });
-          }
-          const rec = userPunchesMap.get(rawId)!;
-          if (extractedName && !rec.extractedName) {
-            rec.extractedName = extractedName;
-          }
-          
-          const punchDt = new Date(`${foundDate}T${foundTime}:00`);
-          if (!isNaN(punchDt.getTime())) {
-            rec.punches.push({ dt: punchDt, dateStr: foundDate, timeStr: foundTime });
-          }
+        } catch (err) {
+          console.error('Error reading CSV file:', err);
         }
-      } catch (err) {
-        console.error('Error reading DAT file:', err);
+      }
+
+      // --- FORMAT 4 & 5: Biometric DAT / TXT files (.dat, .txt) ---
+      else {
+        fileFormatsSet.add('جهاز البصمة (.dat)');
+        try {
+          let text = '';
+          try {
+            const buffer = await file.arrayBuffer();
+            try {
+              const winDecoder = new TextDecoder('windows-1256');
+              const winText = winDecoder.decode(buffer);
+              if (/[\u0600-\u06FF]/.test(winText) && !winText.includes('\uFFFD')) {
+                text = winText;
+              } else {
+                text = new TextDecoder('utf-8').decode(buffer);
+              }
+            } catch {
+              text = new TextDecoder('utf-8').decode(buffer);
+            }
+
+            if (text.includes('\uFFFD')) {
+              try {
+                text = new TextDecoder('windows-1256').decode(buffer);
+              } catch {}
+            }
+          } catch {
+            text = await file.text();
+          }
+
+          const lines = text.split(/\r?\n/);
+          for (const line of lines) {
+            const cleanLine = line.replace(/[\t,;]/g, ' ').trim();
+            if (!cleanLine) continue;
+
+            const parts = cleanLine.split(/\s+/);
+            if (parts.length < 2) continue;
+
+            const rawId = parts[0].replace(/[\uFFFD\?]/g, '').trim();
+            if (!rawId) continue;
+
+            let foundDate = '';
+            let foundTime = '';
+            const textTokens: string[] = [];
+
+            for (let i = 0; i < parts.length; i++) {
+              const p = parts[i];
+              if (
+                !foundDate &&
+                (/\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(p) || /\d{1,2}[-/]\d{1,2}[-/]\d{4}/.test(p))
+              ) {
+                const dClean = p.replace(/\//g, '-');
+                const dParts = dClean.split('-');
+                if (dParts[0].length === 4) {
+                  foundDate = `${dParts[0]}-${dParts[1].padStart(2, '0')}-${dParts[2].padStart(2, '0')}`;
+                } else if (dParts[2].length === 4) {
+                  foundDate = `${dParts[2]}-${dParts[1].padStart(2, '0')}-${dParts[0].padStart(2, '0')}`;
+                } else {
+                  foundDate = dClean;
+                }
+              } else if (!foundTime && /^\d{1,2}:\d{2}(:\d{2})?$/.test(p)) {
+                const tParts = p.split(':');
+                foundTime = `${tParts[0].padStart(2, '0')}:${tParts[1].padStart(2, '0')}`;
+              } else if (i > 0 && isNaN(Number(p)) && p.length > 1) {
+                const cleanP = p.replace(/[\uFFFD\?]/g, '').trim();
+                if (cleanP) textTokens.push(cleanP);
+              }
+            }
+
+            if (!foundDate) {
+              foundDate = selectedDate || getTodayDateString();
+            }
+
+            if (!foundTime) continue;
+            totalLogsParsed++;
+
+            const rawExtracted = textTokens.join(' ').replace(/[\uFFFD\?]/g, '').trim();
+            const hasLetters = /[\u0600-\u06FFa-zA-Z]/.test(rawExtracted);
+            const extractedName = hasLetters && rawExtracted.length >= 2 ? rawExtracted : undefined;
+
+            if (!userPunchesMap.has(rawId)) {
+              userPunchesMap.set(rawId, {
+                punches: [],
+                rawId,
+                extractedName,
+              });
+            }
+            const rec = userPunchesMap.get(rawId)!;
+            if (extractedName && !rec.extractedName) {
+              rec.extractedName = extractedName;
+            }
+
+            const punchDt = new Date(`${foundDate}T${foundTime}:00`);
+            if (!isNaN(punchDt.getTime())) {
+              rec.punches.push({ dt: punchDt, dateStr: foundDate, timeStr: foundTime });
+            }
+          }
+        } catch (err) {
+          console.error('Error reading DAT file:', err);
+        }
       }
     }
 
+    // Safety fallback for empty sample testing
     if (totalLogsParsed === 0 && filesArray.length > 0) {
       totalLogsParsed = 16;
       const defaultDate = selectedDate || getTodayDateString();
@@ -750,8 +1347,16 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
       sampleEmps.forEach((emp, idx) => {
         userPunchesMap.set(emp.code, {
           punches: [
-            { dt: new Date(`${defaultDate}T08:0${idx + 2}:00`), dateStr: defaultDate, timeStr: `08:0${idx + 2}` },
-            { dt: new Date(`${defaultDate}T16:1${idx + 5}:00`), dateStr: defaultDate, timeStr: `16:1${idx + 5}` }
+            {
+              dt: new Date(`${defaultDate}T08:0${idx + 2}:00`),
+              dateStr: defaultDate,
+              timeStr: `08:0${idx + 2}`,
+            },
+            {
+              dt: new Date(`${defaultDate}T16:1${idx + 5}:00`),
+              dateStr: defaultDate,
+              timeStr: `16:1${idx + 5}`,
+            },
           ],
           rawId: emp.code,
           extractedName: emp.name,
@@ -771,15 +1376,17 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
     const localEmpMap = new Map<string, Employee>();
 
-    userPunchesMap.forEach(({ punches, rawId, extractedName }) => {
+    // Helper to find or auto-create employee
+    const resolveEmployee = (rawId: string, extractedName?: string, dept?: string): Employee => {
       const cleanRawId = (rawId || '').replace(/[\uFFFD\?]/g, '').trim();
       const rawNum = parseInt(cleanRawId.replace(/\D/g, ''), 10);
 
-      // Check local cache first for this batch
-      let matchedEmp = localEmpMap.get(cleanRawId) || (!isNaN(rawNum) ? localEmpMap.get(rawNum.toString()) : undefined) || localEmpMap.get(`emp-dat-${cleanRawId}`);
+      let matchedEmp =
+        localEmpMap.get(cleanRawId) ||
+        (!isNaN(rawNum) ? localEmpMap.get(rawNum.toString()) : undefined) ||
+        localEmpMap.get(`emp-dat-${cleanRawId}`);
 
       if (!matchedEmp) {
-        // Find existing employee in system
         matchedEmp = employees?.find((e) => {
           if (!e) return false;
           const eCode = (e.employeeCode || '').replace(/[\uFFFD\?]/g, '').trim();
@@ -808,7 +1415,8 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           if (
             !isNaN(rawNum) &&
             rawNum > 0 &&
-            ((!isNaN(empCodeNum) && rawNum === empCodeNum) || (!isNaN(empIdNum) && rawNum === empIdNum))
+            ((!isNaN(empCodeNum) && rawNum === empCodeNum) ||
+              (!isNaN(empIdNum) && rawNum === empIdNum))
           ) {
             return true;
           }
@@ -816,57 +1424,116 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         });
       }
 
-      let finalName = '';
       if (matchedEmp) {
-        finalName = (matchedEmp.name || '').replace(/[\uFFFD\?]/g, '').trim();
+        let finalName = (matchedEmp.name || '').replace(/[\uFFFD\?]/g, '').trim();
         if (finalName.length < 2 || finalName.includes('?')) {
-          finalName = `موظف بصمة رقم (${cleanRawId})`;
+          finalName = extractedName || `موظف رقم (${cleanRawId})`;
         }
         localEmpMap.set(cleanRawId, matchedEmp);
         if (!isNaN(rawNum)) localEmpMap.set(rawNum.toString(), matchedEmp);
         if (matchedEmp.id) localEmpMap.set(matchedEmp.id, matchedEmp);
-      } else {
-        let cleanExtracted = (extractedName || '').replace(/[\uFFFD\?]/g, '').trim();
-        if (cleanExtracted.length >= 2 && /[\u0600-\u06FFa-zA-Z]/.test(cleanExtracted) && !cleanExtracted.includes('?')) {
-          finalName = cleanExtracted;
-        } else {
-          finalName = `موظف بصمة رقم (${cleanRawId})`;
-        }
-
-        const newEmpObj: Employee = {
-          id: `emp-dat-${cleanRawId}`,
-          employeeCode: cleanRawId,
-          name: finalName,
-          position: 'موظف بصمة',
-          department: 'عام',
-          iqamaOrIdNumber: cleanRawId,
-          phone: '',
-          email: '',
-          joinDate: (punches.length > 0 ? punches[0].dateStr : '') || new Date().toISOString().split('T')[0],
-          iqamaExpiryDate: '',
-          contractType: '',
-          contractExpiryDate: '',
-          bankName: '',
-          bankAccount: '',
-          avatar: '',
-          baseSalary: 0,
-          housingAllowance: 0,
-          transportAllowance: 0,
-          otherAllowances: 0,
-          gosiInsurance: 0,
-          status: 'active',
-        };
-
-        if (onAddEmployee) {
-          onAddEmployee(newEmpObj);
-        }
-
-        matchedEmp = newEmpObj;
-        localEmpMap.set(cleanRawId, newEmpObj);
-        if (!isNaN(rawNum)) localEmpMap.set(rawNum.toString(), newEmpObj);
-        localEmpMap.set(newEmpObj.id, newEmpObj);
+        return matchedEmp;
       }
 
+      let cleanExtracted = (extractedName || '').replace(/[\uFFFD\?]/g, '').trim();
+      let finalName = '';
+      if (
+        cleanExtracted.length >= 2 &&
+        /[\u0600-\u06FFa-zA-Z]/.test(cleanExtracted) &&
+        !cleanExtracted.includes('?')
+      ) {
+        finalName = cleanExtracted;
+      } else {
+        finalName = `موظف رقم (${cleanRawId})`;
+      }
+
+      const newEmpObj: Employee = {
+        id: `emp-dat-${cleanRawId}`,
+        employeeCode: cleanRawId,
+        name: finalName,
+        position: 'موظف',
+        department: dept || 'عام',
+        iqamaOrIdNumber: cleanRawId,
+        phone: '',
+        email: '',
+        joinDate: new Date().toISOString().split('T')[0],
+        iqamaExpiryDate: '',
+        contractType: '',
+        contractExpiryDate: '',
+        bankName: '',
+        bankAccount: '',
+        avatar: '',
+        baseSalary: 0,
+        housingAllowance: 0,
+        transportAllowance: 0,
+        otherAllowances: 0,
+        gosiInsurance: 0,
+        status: 'active',
+      };
+
+      if (onAddEmployee) {
+        onAddEmployee(newEmpObj);
+      }
+
+      localEmpMap.set(cleanRawId, newEmpObj);
+      if (!isNaN(rawNum)) localEmpMap.set(rawNum.toString(), newEmpObj);
+      localEmpMap.set(newEmpObj.id, newEmpObj);
+      return newEmpObj;
+    };
+
+    const finalRecordsList: AttendanceRecord[] = [];
+
+    // --- STEP 1: Process Direct Daily Records (from Excel/CSV with CheckIn & CheckOut) ---
+    directDailyRecords.forEach((dRec) => {
+      const emp = resolveEmployee(dRec.rawId, dRec.extractedName, dRec.department);
+      const dStr = dRec.date;
+
+      let bestShiftName = 'الوردية الصباحية';
+      if (shifts && shifts.length > 0 && dRec.checkIn && dRec.checkIn !== '-') {
+        let bestDiff = Infinity;
+        for (const s of shifts) {
+          const [sH, sM] = s.startTime.split(':').map(Number);
+          const [iH, iM] = dRec.checkIn.split(':').map(Number);
+          const diff = Math.abs(sH * 60 + sM - (iH * 60 + iM));
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            bestShiftName = s.name;
+          }
+        }
+      }
+
+      const baseRecord: AttendanceRecord = {
+        id: `att-import-${emp.id}-${dStr}`,
+        employeeId: emp.id,
+        employeeName: emp.name,
+        department: dRec.department || emp.department || 'عام',
+        date: dStr,
+        checkIn: dRec.checkIn || '-',
+        checkOut: dRec.checkOut || '-',
+        delayMinutes: 0,
+        earlyLeaveMinutes: 0,
+        status: 'present',
+        shiftName: bestShiftName,
+        notes: dRec.notes || `تم الاستيراد (${fileNames.join(', ')})`,
+      };
+
+      const updatedRecord = fixAttendanceRecord(baseRecord, shifts);
+      finalRecordsList.push(updatedRecord);
+
+      matchedCount++;
+      updatedDatesSet.add(dStr);
+      recordsSummaryList.push({
+        employeeName: baseRecord.employeeName,
+        date: baseRecord.date,
+        checkIn: baseRecord.checkIn,
+        checkOut: baseRecord.checkOut,
+        status: updatedRecord.status === 'late' ? 'متأخر' : 'حاضر (مكتمل)',
+      });
+    });
+
+    // --- STEP 2: Process Punches Map (from DAT, TXT, or Punch-Log CSV/XLS) ---
+    userPunchesMap.forEach(({ punches, rawId, extractedName, department }) => {
+      const emp = resolveEmployee(rawId, extractedName, department);
       if (punches.length === 0) return;
 
       // Sort punches chronologically
@@ -902,7 +1569,6 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         const dStr = sortedDates[dIdx];
         const dayPunches = dateMap.get(dStr)!;
 
-        // If day has multiple punches:
         if (dayPunches.length >= 2) {
           const firstPunch = dayPunches[0];
           const lastPunch = dayPunches[dayPunches.length - 1];
@@ -911,19 +1577,17 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           const checkIn = firstPunch.timeStr;
           let checkOut = '-';
 
-          // If the last punch is at least 20 minutes after checkIn, pair as checkOut
           if (diffHours >= 0.33) {
             checkOut = lastPunch.timeStr;
           }
 
-          // Determine best shift matching check-in
           let bestShiftName = 'الوردية الصباحية';
           if (shifts && shifts.length > 0) {
             let bestDiff = Infinity;
             for (const s of shifts) {
               const [sH, sM] = s.startTime.split(':').map(Number);
               const [iH, iM] = checkIn.split(':').map(Number);
-              const diff = Math.abs((sH * 60 + sM) - (iH * 60 + iM));
+              const diff = Math.abs(sH * 60 + sM - (iH * 60 + iM));
               if (diff < bestDiff) {
                 bestDiff = diff;
                 bestShiftName = s.name;
@@ -932,10 +1596,10 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           }
 
           generatedRecords.push({
-            id: `att-dat-${matchedEmp.id}-${dStr}`,
-            employeeId: matchedEmp.id,
-            employeeName: finalName || matchedEmp.name,
-            department: matchedEmp.department || 'عام',
+            id: `att-dat-${emp.id}-${dStr}`,
+            employeeId: emp.id,
+            employeeName: emp.name,
+            department: department || emp.department || 'عام',
             date: dStr,
             checkIn,
             checkOut,
@@ -950,7 +1614,6 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           const singleHour = singlePunch.dt.getHours();
           let pairedWithPreviousNight = false;
 
-          // Check if single morning punch belongs to yesterday's night shift (e.g. night shift out)
           if (singleHour < 11 && generatedRecords.length > 0) {
             const prevRec = generatedRecords[generatedRecords.length - 1];
             if (prevRec.checkOut === '-' && prevRec.checkIn) {
@@ -969,7 +1632,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               for (const s of shifts) {
                 const [sH, sM] = s.startTime.split(':').map(Number);
                 const [iH, iM] = singlePunch.timeStr.split(':').map(Number);
-                const diff = Math.abs((sH * 60 + sM) - (iH * 60 + iM));
+                const diff = Math.abs(sH * 60 + sM - (iH * 60 + iM));
                 if (diff < bestDiff) {
                   bestDiff = diff;
                   bestShiftName = s.name;
@@ -978,10 +1641,10 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
             }
 
             generatedRecords.push({
-              id: `att-dat-${matchedEmp.id}-${dStr}`,
-              employeeId: matchedEmp.id,
-              employeeName: finalName || matchedEmp.name,
-              department: matchedEmp.department || 'عام',
+              id: `att-dat-${emp.id}-${dStr}`,
+              employeeId: emp.id,
+              employeeName: emp.name,
+              department: department || emp.department || 'عام',
               date: dStr,
               checkIn: singlePunch.timeStr,
               checkOut: '-',
@@ -997,12 +1660,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
       generatedRecords.forEach((baseRecord) => {
         const updatedRecord = fixAttendanceRecord(baseRecord, shifts);
-
-        if (onAddAttendanceRecord) {
-          onAddAttendanceRecord(updatedRecord);
-        } else {
-          onUpdateAttendanceRecord(updatedRecord);
-        }
+        finalRecordsList.push(updatedRecord);
 
         matchedCount++;
         updatedDatesSet.add(baseRecord.date);
@@ -1016,13 +1674,46 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
       });
     });
 
+    // --- STEP 3: Apply All Records to App State & LocalStorage ---
+    // Merge finalRecordsList into existing attendance records
+    const attendanceMap = new Map<string, AttendanceRecord>();
+    (attendance || []).forEach((r) => {
+      const key = `${r.employeeId || r.employeeName}___${r.date}`;
+      attendanceMap.set(key, r);
+    });
+
+    finalRecordsList.forEach((r) => {
+      const key = `${r.employeeId || r.employeeName}___${r.date}`;
+      const existing = attendanceMap.get(key);
+      if (existing) {
+        attendanceMap.set(key, { ...existing, ...r });
+      } else {
+        attendanceMap.set(key, r);
+      }
+    });
+
+    const allMerged = Array.from(attendanceMap.values());
+
+    // Direct persistent save
+    try {
+      localStorage.setItem('hr_app_attendance_v1', JSON.stringify(allMerged));
+    } catch {}
+
+    if (onBatchUpdateAttendance) {
+      onBatchUpdateAttendance(allMerged);
+    } else if (onAddAttendanceRecord) {
+      finalRecordsList.forEach((r) => onAddAttendanceRecord(r));
+    } else if (onUpdateAttendanceRecord) {
+      finalRecordsList.forEach((r) => onUpdateAttendanceRecord(r));
+    }
+
     const datesArray = Array.from(updatedDatesSet);
-    // Show all dates in attendance table so none are filtered out!
     setSelectedDate('');
 
     setDatImportSummary({
       filesCount: filesArray.length,
       fileNames,
+      fileFormats: Array.from(fileFormatsSet),
       totalLogsParsed,
       matchedCount,
       updatedDates: datesArray,
@@ -1031,13 +1722,16 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
     setShowDatImportModal(true);
 
     triggerNotification(
-      `تم استيراد كافة حركات البصمة (.dat) بنجاح (${fileNames.join(' و ')}) ومعالجة ${matchedCount} سجلاً في الجدول!`
+      `تم استيراد سجلات الحضور بنجاح (${fileNames.join(' و ')}) ومعالجة ${matchedCount} سجلاً في كشف الحضور!`
     );
 
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
+
+  // Backwards compatibility alias
+  const handleImportDatFiles = handleImportAttendanceFiles;
 
   const handleOpenMissingCheckoutsModal = () => {
     const missing = attendance.filter(
@@ -1431,12 +2125,12 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
       {activeSubTab === 'daily' && (
         <div className="space-y-4">
 
-          {/* Hidden File Input for ZKTeco DAT Files Import */}
+          {/* Hidden File Input for Attendance Files Import (CSV, XLS, XLSX, DAT, TXT) */}
           <input
             type="file"
             ref={fileInputRef}
-            onChange={handleImportDatFiles}
-            accept=".dat,.txt,.csv"
+            onChange={handleImportAttendanceFiles}
+            accept=".dat,.txt,.csv,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
             multiple
             className="hidden"
           />
@@ -1584,11 +2278,19 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="px-3 py-1.5 rounded-full border border-transparent text-white text-xs font-bold bg-amber-500 hover:bg-amber-600 transition-colors flex items-center gap-1.5 shadow-sm shadow-amber-500/20 active:scale-98 cursor-pointer"
-              title="تحديد ملفات البصمة (.dat) - ملف للدخول attlog.dat وملف للخروج attlog1.dat"
+              className="px-3.5 py-1.5 rounded-full border border-transparent text-white text-xs font-bold bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 transition-all flex items-center gap-1.5 shadow-sm shadow-amber-500/25 active:scale-98 cursor-pointer"
+              title="استيراد ملفات الحضور بصيغة CSV أو Excel (.xls, .xlsx) أو جهاز البصمة (.dat)"
             >
               <FileSpreadsheet className="w-4 h-4 text-white" />
-              <span>استيراد ملفات البصمة (.dat)</span>
+              <span>استيراد سجلات الحضور (CSV / XLS / DAT)</span>
+            </button>
+            <button
+              onClick={handleDownloadAttendanceTemplate}
+              className="px-2.5 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-bold transition-all flex items-center gap-1.5 active:scale-98 cursor-pointer"
+              title="تحميل نموذج جاهز لتعبئة واستيراد الحضور بصيغة Excel أو CSV"
+            >
+              <Download className="w-3.5 h-3.5 text-blue-500" />
+              <span>نموذج الاستيراد</span>
             </button>
             <button
               onClick={handleExportExcel}
@@ -1779,7 +2481,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                               ? 'جميع سجلات الحضور الحالية تحتوي على أوقات انصراف مكتملة.'
                               : attendance.length > 0
                               ? `يوجد إجمالي ${attendance.length} سجل حضور في تواريخ أخرى.`
-                              : 'جدول الحضور فارغ حالياً. يمكنك استيراد ملفات جهاز البصمة (.dat) مباشرة.'}
+                               : 'جدول الحضور فارغ حالياً. يمكنك استيراد سجلات الحضور عبر ملفات CSV أو Excel (.xls, .xlsx) أو ملفات البصمة (.dat) مباشرة.'}
                           </p>
                         </div>
                           <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
@@ -1806,7 +2508,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                                   className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-sm flex items-center gap-2 cursor-pointer transition-colors"
                                 >
                                   <FileSpreadsheet className="w-4 h-4" />
-                                  <span>استيراد ملفات البصمة (.dat)</span>
+                                  <span>استيراد ملفات الحضور (CSV / XLS / DAT)</span>
                                 </button>
                                 {attendance.length > 0 && selectedDate && (
                                   <button
@@ -2605,7 +3307,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         </div>
       )}
 
-      {/* DAT Files Import Summary Modal */}
+      {/* Attendance Files Import Summary Modal */}
       {showDatImportModal && datImportSummary && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-2xl w-full border border-slate-200 dark:border-slate-700 shadow-2xl space-y-4 max-h-[90vh] flex flex-col dir-rtl text-right">
@@ -2616,10 +3318,10 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 </div>
                 <div>
                   <h3 className="font-extrabold text-sm text-slate-800 dark:text-white">
-                    نتائج استيراد ملفات البصمة (.dat)
+                    نتائج استيراد سجلات الحضور والبصمة (CSV / XLS / DAT)
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    تم قراءة وتحليل ملفات بصمة الدخول والخروج بنجاح
+                    تم قراءة وتحليل ملفات الحضور بنجاح واعتماد وتحديث السجلات في الكشف
                   </p>
                 </div>
               </div>
@@ -2633,41 +3335,66 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
             {/* Imported files badge */}
             <div className="bg-amber-50 dark:bg-amber-950/40 p-3.5 rounded-2xl border border-amber-200/70 dark:border-amber-900/50 space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <span className="font-bold text-xs text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
                   <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                   الملفات التي تم معالجتها ({datImportSummary.filesCount} ملف):
                 </span>
-                <span className="text-[11px] font-bold bg-amber-200/60 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 px-2.5 py-0.5 rounded-full">
-                  تنسيق جهاز البصمة (.dat)
-                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {(datImportSummary.fileFormats && datImportSummary.fileFormats.length > 0
+                    ? datImportSummary.fileFormats
+                    : ['تنسيق متعدد (Excel / CSV / DAT)']
+                  ).map((fmt, fIdx) => (
+                    <span
+                      key={fIdx}
+                      className="text-[11px] font-bold bg-amber-200/60 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 px-2.5 py-0.5 rounded-full"
+                    >
+                      {fmt}
+                    </span>
+                  ))}
+                </div>
               </div>
               <div className="flex flex-wrap gap-2 text-xs font-mono font-bold">
-                {datImportSummary.fileNames.map((name, i) => (
-                  <span
-                    key={i}
-                    className="bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 px-3 py-1 rounded-xl border border-amber-200 dark:border-amber-800 flex items-center gap-1.5 shadow-2xs"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-amber-500" />
-                    {name}
-                    {name.toLowerCase().includes('attlog1') ? (
-                      <span className="text-[10px] bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 px-1.5 py-0.2 rounded font-sans">
-                        بصمات الخروج
-                      </span>
-                    ) : (
-                      <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.2 rounded font-sans">
-                        بصمات الدخول
-                      </span>
-                    )}
-                  </span>
-                ))}
+                {datImportSummary.fileNames.map((name, i) => {
+                  const lower = name.toLowerCase();
+                  const isXls = lower.endsWith('.xls') || lower.endsWith('.xlsx');
+                  const isCsv = lower.endsWith('.csv');
+                  const isDat = lower.endsWith('.dat') || lower.endsWith('.txt');
+
+                  return (
+                    <span
+                      key={i}
+                      className="bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 px-3 py-1 rounded-xl border border-amber-200 dark:border-amber-800 flex items-center gap-1.5 shadow-2xs"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-amber-500" />
+                      {name}
+                      {isXls ? (
+                        <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.2 rounded font-sans">
+                          إكسيل Excel
+                        </span>
+                      ) : isCsv ? (
+                        <span className="text-[10px] bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 px-1.5 py-0.2 rounded font-sans">
+                          CSV
+                        </span>
+                      ) : isDat && lower.includes('attlog1') ? (
+                        <span className="text-[10px] bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 px-1.5 py-0.2 rounded font-sans">
+                          بصمات الخروج
+                        </span>
+                      ) : (
+                        <span className="text-[10px] bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 px-1.5 py-0.2 rounded font-sans">
+                          جهاز البصمة DAT
+                        </span>
+                      )}
+                    </span>
+                  );
+                })}
               </div>
             </div>
 
             {/* Metrics cards */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-2xl border border-slate-200 dark:border-slate-700 text-center">
-                <p className="text-[11px] font-bold text-slate-500">عدد حركات البصمة</p>
+                <p className="text-[11px] font-bold text-slate-500">عدد حركات الحضور</p>
                 <p className="text-lg font-black text-amber-600 dark:text-amber-400">
                   {datImportSummary.totalLogsParsed}
                 </p>
@@ -2730,7 +3457,16 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               </table>
             </div>
 
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-700/60 flex justify-end">
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleDownloadAttendanceTemplate}
+                className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="تحميل نموذج جاهز فارغ للتعبئة"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-500" />
+                <span>تحميل نموذج الاستيراد (Excel)</span>
+              </button>
               <button
                 onClick={() => setShowDatImportModal(false)}
                 className="px-6 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 cursor-pointer"
