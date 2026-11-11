@@ -1233,9 +1233,13 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         }
       }
 
-      // --- FORMAT 4 & 5: Biometric DAT / TXT files (.dat, .txt) ---
+      // --- FORMAT 4, 5 & 6: Biometric DAT / ABT / TXT files (.dat, .abt, .txt) ---
       else {
-        fileFormatsSet.add('جهاز البصمة (.dat)');
+        if (ext === 'abt') {
+          fileFormatsSet.add('ملفات البصمة (.abt)');
+        } else {
+          fileFormatsSet.add('جهاز البصمة (.dat)');
+        }
         try {
           let text = '';
           try {
@@ -1266,6 +1270,18 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
             const cleanLine = line.replace(/[\t,;]/g, ' ').trim();
             if (!cleanLine) continue;
 
+            // Skip header lines if present in ABT or DAT
+            const lowerLine = cleanLine.toLowerCase();
+            if (
+              lowerLine.includes('userid') ||
+              lowerLine.includes('user id') ||
+              lowerLine.includes('emp_id') ||
+              lowerLine.includes('رقم الموظف') ||
+              lowerLine.includes('كود الموظف')
+            ) {
+              continue;
+            }
+
             const parts = cleanLine.split(/\s+/);
             if (parts.length < 2) continue;
 
@@ -1273,7 +1289,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
             if (!rawId) continue;
 
             let foundDate = '';
-            let foundTime = '';
+            const foundTimes: string[] = [];
             const textTokens: string[] = [];
 
             for (let i = 0; i < parts.length; i++) {
@@ -1291,12 +1307,19 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 } else {
                   foundDate = dClean;
                 }
-              } else if (!foundTime && /^\d{1,2}:\d{2}(:\d{2})?$/.test(p)) {
+              } else if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(p)) {
                 const tParts = p.split(':');
-                foundTime = `${tParts[0].padStart(2, '0')}:${tParts[1].padStart(2, '0')}`;
+                foundTimes.push(`${tParts[0].padStart(2, '0')}:${tParts[1].padStart(2, '0')}`);
               } else if (i > 0 && isNaN(Number(p)) && p.length > 1) {
                 const cleanP = p.replace(/[\uFFFD\?]/g, '').trim();
-                if (cleanP) textTokens.push(cleanP);
+                if (
+                  cleanP &&
+                  !['c/in', 'c/out', 'in', 'out', 'checkin', 'checkout'].includes(
+                    cleanP.toLowerCase()
+                  )
+                ) {
+                  textTokens.push(cleanP);
+                }
               }
             }
 
@@ -1304,8 +1327,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               foundDate = selectedDate || getTodayDateString();
             }
 
-            if (!foundTime) continue;
-            totalLogsParsed++;
+            if (foundTimes.length === 0) continue;
 
             const rawExtracted = textTokens.join(' ').replace(/[\uFFFD\?]/g, '').trim();
             const hasLetters = /[\u0600-\u06FFa-zA-Z]/.test(rawExtracted);
@@ -1323,13 +1345,16 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               rec.extractedName = extractedName;
             }
 
-            const punchDt = new Date(`${foundDate}T${foundTime}:00`);
-            if (!isNaN(punchDt.getTime())) {
-              rec.punches.push({ dt: punchDt, dateStr: foundDate, timeStr: foundTime });
+            for (const tStr of foundTimes) {
+              totalLogsParsed++;
+              const punchDt = new Date(`${foundDate}T${tStr}:00`);
+              if (!isNaN(punchDt.getTime())) {
+                rec.punches.push({ dt: punchDt, dateStr: foundDate, timeStr: tStr });
+              }
             }
           }
         } catch (err) {
-          console.error('Error reading DAT file:', err);
+          console.error('Error reading DAT/ABT file:', err);
         }
       }
     }
@@ -2125,12 +2150,12 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
       {activeSubTab === 'daily' && (
         <div className="space-y-4">
 
-          {/* Hidden File Input for Attendance Files Import (CSV, XLS, XLSX, DAT, TXT) */}
+          {/* Hidden File Input for Attendance Files Import (CSV, XLS, XLSX, DAT, ABT, TXT) */}
           <input
             type="file"
             ref={fileInputRef}
             onChange={handleImportAttendanceFiles}
-            accept=".dat,.txt,.csv,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+            accept=".dat,.abt,.txt,.csv,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
             multiple
             className="hidden"
           />
@@ -2279,10 +2304,10 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
             <button
               onClick={() => fileInputRef.current?.click()}
               className="px-3.5 py-1.5 rounded-full border border-transparent text-white text-xs font-bold bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 transition-all flex items-center gap-1.5 shadow-sm shadow-amber-500/25 active:scale-98 cursor-pointer"
-              title="استيراد ملفات الحضور بصيغة CSV أو Excel (.xls, .xlsx) أو جهاز البصمة (.dat)"
+              title="استيراد ملفات الحضور بصيغة CSV أو Excel (.xls, .xlsx) أو أجهزة البصمة (.dat, .abt)"
             >
               <FileSpreadsheet className="w-4 h-4 text-white" />
-              <span>استيراد سجلات الحضور (CSV / XLS / DAT)</span>
+              <span>استيراد سجلات الحضور (CSV / XLS / DAT / ABT)</span>
             </button>
             <button
               onClick={handleDownloadAttendanceTemplate}
@@ -2481,7 +2506,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                               ? 'جميع سجلات الحضور الحالية تحتوي على أوقات انصراف مكتملة.'
                               : attendance.length > 0
                               ? `يوجد إجمالي ${attendance.length} سجل حضور في تواريخ أخرى.`
-                               : 'جدول الحضور فارغ حالياً. يمكنك استيراد سجلات الحضور عبر ملفات CSV أو Excel (.xls, .xlsx) أو ملفات البصمة (.dat) مباشرة.'}
+                                : 'جدول الحضور فارغ حالياً. يمكنك استيراد سجلات الحضور عبر ملفات CSV أو Excel (.xls, .xlsx) أو ملفات البصمة (.dat, .abt) مباشرة.'}
                           </p>
                         </div>
                           <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
@@ -2508,7 +2533,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                                   className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-sm flex items-center gap-2 cursor-pointer transition-colors"
                                 >
                                   <FileSpreadsheet className="w-4 h-4" />
-                                  <span>استيراد ملفات الحضور (CSV / XLS / DAT)</span>
+                                  <span>استيراد ملفات الحضور (CSV / XLS / DAT / ABT)</span>
                                 </button>
                                 {attendance.length > 0 && selectedDate && (
                                   <button
@@ -3318,7 +3343,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 </div>
                 <div>
                   <h3 className="font-extrabold text-sm text-slate-800 dark:text-white">
-                    نتائج استيراد سجلات الحضور والبصمة (CSV / XLS / DAT)
+                    نتائج استيراد سجلات الحضور والبصمة (CSV / XLS / DAT / ABT)
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     تم قراءة وتحليل ملفات الحضور بنجاح واعتماد وتحديث السجلات في الكشف
@@ -3343,7 +3368,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 <div className="flex flex-wrap gap-1.5">
                   {(datImportSummary.fileFormats && datImportSummary.fileFormats.length > 0
                     ? datImportSummary.fileFormats
-                    : ['تنسيق متعدد (Excel / CSV / DAT)']
+                    : ['تنسيق متعدد (Excel / CSV / DAT / ABT)']
                   ).map((fmt, fIdx) => (
                     <span
                       key={fIdx}
@@ -3359,6 +3384,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                   const lower = name.toLowerCase();
                   const isXls = lower.endsWith('.xls') || lower.endsWith('.xlsx');
                   const isCsv = lower.endsWith('.csv');
+                  const isAbt = lower.endsWith('.abt');
                   const isDat = lower.endsWith('.dat') || lower.endsWith('.txt');
 
                   return (
@@ -3375,6 +3401,10 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                       ) : isCsv ? (
                         <span className="text-[10px] bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 px-1.5 py-0.2 rounded font-sans">
                           CSV
+                        </span>
+                      ) : isAbt ? (
+                        <span className="text-[10px] bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300 px-1.5 py-0.2 rounded font-sans">
+                          بصمة ABT
                         </span>
                       ) : isDat && lower.includes('attlog1') ? (
                         <span className="text-[10px] bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 px-1.5 py-0.2 rounded font-sans">
